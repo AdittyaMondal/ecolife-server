@@ -1,4 +1,6 @@
-import { errorResponses, jsonOk, notImplemented, secured } from '@common/openapi/envelope.ts';
+import { requireUser } from '@common/guards/auth.guard.ts';
+import { ok } from '@common/interceptors/response-envelope.ts';
+import { errorResponses, jsonOk, secured } from '@common/openapi/envelope.ts';
 import { createModule } from '@common/openapi/factory.ts';
 import { paginated } from '@common/openapi/params.ts';
 import { createRoute } from '@hono/zod-openapi';
@@ -7,6 +9,7 @@ import {
   leaderboardRowSchema,
   myRankSchema,
 } from './leaderboard.schema.ts';
+import * as service from './leaderboard.service.ts';
 
 export const leaderboardRoutes = createModule();
 
@@ -16,15 +19,16 @@ leaderboardRoutes.openapi(
     path: '/',
     tags: ['leaderboard'],
     summary: 'Points ranking',
+    middleware: [requireUser] as const,
     security: secured,
     request: { query: leaderboardQuerySchema },
     responses: {
       200: jsonOk(paginated(leaderboardRowSchema), 'Ranked page'),
+      400: errorResponses[400],
       401: errorResponses[401],
-      501: errorResponses[501],
     },
   }),
-  notImplemented,
+  async (c) => ok(c, await service.board(c.get('user').id, c.req.valid('query')), 200),
 );
 
 leaderboardRoutes.openapi(
@@ -33,12 +37,12 @@ leaderboardRoutes.openapi(
     path: '/me',
     tags: ['leaderboard'],
     summary: 'Own rank, without paging to it',
+    middleware: [requireUser] as const,
     security: secured,
     responses: {
       200: jsonOk(myRankSchema, 'Own rank'),
       401: errorResponses[401],
-      501: errorResponses[501],
     },
   }),
-  notImplemented,
+  async (c) => ok(c, await service.myRank(c.get('user').id), 200),
 );
