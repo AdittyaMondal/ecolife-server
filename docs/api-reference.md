@@ -322,7 +322,6 @@ Soft-deletes, anonymises PII, and hard-deletes uploads within 30 days.
 |---|---|---|
 | `200` | Scheduled for deletion | object |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/profile`
 
@@ -336,7 +335,6 @@ Soft-deletes, anonymises PII, and hard-deletes uploads within 30 days.
 |---|---|---|
 | `200` | Own profile | [`OwnProfile`](#ownprofile) |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `PATCH` `/api/v1/profile`
 
@@ -362,7 +360,6 @@ Recomputes the baseline forward only. Past daily_footprints rows carry their own
 | `200` | Updated | [`OwnProfile`](#ownprofile) |
 | `400` | Validation failed | null |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/profile/export`
 
@@ -376,7 +373,6 @@ Recomputes the baseline forward only. Past daily_footprints rows carry their own
 |---|---|---|
 | `200` | Everything we hold | [`DataExport`](#dataexport) |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/profile/onboarding`
 
@@ -392,7 +388,6 @@ Any device resumes where another left off — the wizard is server-persisted.
 |---|---|---|
 | `200` | Current onboarding state | [`OnboardingState`](#onboardingstate) |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/profile/onboarding/complete`
 
@@ -408,7 +403,6 @@ Any device resumes where another left off — the wizard is server-persisted.
 | `401` | Not authenticated | null |
 | `409` | Conflict | null |
 | `422` | Domain rule violation | null |
-| `501` | Not implemented yet | null |
 
 ### `PATCH` `/api/v1/profile/onboarding/step/{n}`
 
@@ -435,8 +429,6 @@ _See the schema._
 | `200` | Step saved | [`OnboardingState`](#onboardingstate) |
 | `400` | Validation failed | null |
 | `401` | Not authenticated | null |
-| `409` | Conflict | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/profile/rewards`
 
@@ -457,7 +449,6 @@ _See the schema._
 |---|---|---|
 | `200` | Ledger page | object |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/users/{id}`
 
@@ -477,7 +468,6 @@ _See the schema._
 |---|---|---|
 | `200` | Public profile | [`PublicProfile`](#publicprofile) |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ---
 
