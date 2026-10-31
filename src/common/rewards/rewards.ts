@@ -92,6 +92,36 @@ export const coinsFor = (points: number): number => Math.floor(points / 2);
  * pool, which is right for a standalone grant.
  */
 export async function award(tx: Executor, input: AwardInput): Promise<AwardResult> {
+  /**
+   * Verification gates EARNING, centrally (PRD-v2 §4.4).
+   *
+   * This check used to live in each caller, and the goal-settlement path
+   * forgot it — a comment three lines from here claimed the opposite, which
+   * is precisely why it was worth moving. Every earn path now goes through
+   * one place, including ones not written yet.
+   *
+   * Only positive deltas are gated. A SPEND must always work: refusing to
+   * debit coins from an unverified wallet would hand out free orders, which
+   * is the opposite of the intent. `admin` is exempt so a human correction
+   * is never blocked by it.
+   *
+   * It SKIPS rather than throws, because an earn is almost always attached
+   * to something the user is entitled to regardless — a settled goal, a
+   * logged day. Throwing would roll that back too.
+   */
+  const isEarning = input.pointsDelta > 0 || input.coinsDelta > 0;
+  if (isEarning && input.source !== 'admin' && !(await canEarn(tx, input.userId))) {
+    const [row] = await tx
+      .select({ pointsTotal: users.pointsTotal, coinsBalance: users.coinsBalance })
+      .from(users)
+      .where(eq(users.id, input.userId));
+    return {
+      awarded: false,
+      pointsTotal: row?.pointsTotal ?? 0,
+      coinsBalance: row?.coinsBalance ?? 0,
+    };
+  }
+
   const inserted = await tx
     .insert(rewardTransactions)
     .values({
@@ -146,12 +176,13 @@ export async function award(tx: Executor, input: AwardInput): Promise<AwardResul
 }
 
 /**
- * Earning requires a verified email (PRD-v2 §4.4).
+ * Is this user allowed to earn? (PRD-v2 §4.4)
  *
- * The anti-abuse note is explicit that verification gates earning, not
- * browsing: an unverified account can read everything and log its day, it
- * just cannot accumulate anything a leaderboard or a marketplace honours.
- * Checked here rather than at each call site so a new earn path cannot forget.
+ * An unverified account can read everything and log its day; it just cannot
+ * accumulate anything a leaderboard or a marketplace honours. `award` calls
+ * this itself on every positive grant, so this is only needed directly when
+ * a caller wants to REPORT what it withheld — "pointsAwarded: 0" — rather
+ * than merely not grant it.
  */
 export async function canEarn(tx: Executor, userId: number): Promise<boolean> {
   const [row] = await tx

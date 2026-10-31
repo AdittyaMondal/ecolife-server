@@ -321,6 +321,54 @@ describe('goals', () => {
   );
 
   it(
+    "settles an unverified user's goal without paying it",
+    async () => {
+      const { token, userId, baselinePerDay } = await createOnboardedUser({
+        emailVerifiedAt: null,
+      });
+      const created = await json(
+        await call('/goals', {
+          method: 'POST',
+          headers: auth(token),
+          body: JSON.stringify({
+            type: 'absolute_cap',
+            period: 'week',
+            capKgPerDay: Math.max(2, Math.floor(baselinePerDay) - 1),
+            startDate: localDate(TZ),
+          }),
+        }),
+      );
+      await db
+        .update(goals)
+        .set({ startDate: '2026-04-01', endDate: '2026-04-08' })
+        .where(eq(goals.id, created.data.id));
+      await db.insert(dailyFootprints).values(
+        Array.from({ length: 7 }, (_, i) => ({
+          userId,
+          logDate: `2026-04-0${i + 1}`,
+          totalKg: 1.8,
+          baselineTotalKg: baselinePerDay,
+          sources: { transport: 'logged' as const },
+          factorVersion: 1,
+        })),
+      );
+
+      const list = await json(await call('/goals', { headers: auth(token) }));
+      // The goal still settles — the user did the work and deserves the
+      // record. The grant is what verification withholds, and award()
+      // enforces that centrally rather than relying on this caller.
+      expect(list.data.past[0].status).toBe('achieved');
+
+      const [grants] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(rewardTransactions)
+        .where(and(eq(rewardTransactions.userId, userId), eq(rewardTransactions.source, 'goal')));
+      expect(grants?.n).toBe(0);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "will not touch another user's goal",
     async () => {
       const victim = await onboarded();
