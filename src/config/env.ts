@@ -20,6 +20,11 @@ const envSchema = z.object({
   DATABASE_URL: postgresUrl,
   /** Pooled (-pooler) endpoint — all application query traffic. */
   DATABASE_URL_POOLED: postgresUrl.optional(),
+  /**
+   * The database `bun test` uses. A destructive suite must not share a branch
+   * with anything that matters — see the comment in `@database/client.ts`.
+   */
+  TEST_DATABASE_URL: postgresUrl.optional(),
 
   /** Access token signing key. Required before the auth module lands. */
   JWT_SECRET: z.string().min(32).optional(),

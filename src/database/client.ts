@@ -12,8 +12,21 @@ import * as schema from './schema/index.ts';
  * is not. Traffic goes to the POOLED (-pooler) endpoint; migrations use the
  * direct endpoint (see migrate.ts).
  */
+/**
+ * Tests get their own database, and it is NOT optional.
+ *
+ * The suite registers users, writes logs and deletes accounts, so it must
+ * never point at a branch anyone depends on. It did once: `neon init`
+ * silently repointed `.env` at the production branch and the next full run
+ * put 190 test accounts into it. `TEST_DATABASE_URL` plus the preload guard
+ * in `src/common/testing/setup.ts` are the two halves of making that
+ * impossible rather than merely unlikely.
+ */
+const connectionString =
+  env.NODE_ENV === 'test' && env.TEST_DATABASE_URL ? env.TEST_DATABASE_URL : appDatabaseUrl;
+
 export const pool = new Pool({
-  connectionString: appDatabaseUrl,
+  connectionString,
   max: 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
