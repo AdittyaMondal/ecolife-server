@@ -136,7 +136,7 @@ async function assertOwner(userId: number, organizationId: number) {
 export type UpdateBody = Partial<Omit<CreateBody, 'type'>> & { logoUrl?: string | null };
 
 export async function update(userId: number, organizationId: number, body: UpdateBody) {
-  const existing = await assertOwner(userId, organizationId);
+  await assertOwner(userId, organizationId);
 
   const patch: Record<string, unknown> = {};
   for (const key of [
@@ -158,29 +158,31 @@ export async function update(userId: number, organizationId: number, body: Updat
    * renaming itself to something official-looking, with a matching logo and
    * website, keeps the badge while becoming a different organization
    * entirely. Name, logo and website are the fields that impersonate; a
-   * phone number or a description are not, so those do not disturb an
-   * approval.
+   * phone number or a description are not, so those do not disturb it.
+   *
+   * The decision is made IN THE UPDATE, not from `existing`. Reading the
+   * status here and acting on it later is a race an owner can win: read
+   * `pending`, let an admin approve in the same instant, then land the
+   * rename on a row that is now `approved`.
+   *
+   * Deliberately NOT patchable at all: `type` and `status`. A seller must
+   * not re-badge itself as an NGO, and nobody approves themselves.
    */
-  const identityChanged = (['name', 'logoUrl', 'websiteUrl'] as const).some(
-    (k) => patch[k] !== undefined && patch[k] !== existing[k],
-  );
-  if (identityChanged && existing.status === 'approved') {
-    patch.status = 'pending';
-    patch.reviewedAt = null;
-    patch.reviewNote = null;
-  }
-
-  // Deliberately NOT patchable: `type` and `status`. A seller must not
-  // re-badge itself as an NGO after approval, and nobody approves themselves.
   if (Object.keys(patch).length > 0) {
-    await repo.updateOrganization(organizationId, patch).catch((error: unknown) => {
-      if (
-        (error as { cause?: { constraint?: string } }).cause?.constraint === 'orgs_name_lower_unq'
-      ) {
-        throw new DomainError('ORG_006', 'An organization with that name already exists.', 409);
-      }
-      throw error;
-    });
+    await repo
+      .updateOrganizationChecked(organizationId, patch, {
+        name: body.name,
+        logoUrl: body.logoUrl,
+        websiteUrl: body.websiteUrl,
+      })
+      .catch((error: unknown) => {
+        if (
+          (error as { cause?: { constraint?: string } }).cause?.constraint === 'orgs_name_lower_unq'
+        ) {
+          throw new DomainError('ORG_006', 'An organization with that name already exists.', 409);
+        }
+        throw error;
+      });
   }
 
   const fresh = await repo.findById(organizationId);
@@ -357,10 +359,26 @@ const DECISION_STATUS = {
 export async function review(
   adminId: number,
   organizationId: number,
-  body: { decision: keyof typeof DECISION_STATUS; note?: string },
+  body: { decision: keyof typeof DECISION_STATUS; note?: string; expectedName: string },
 ) {
   const org = await repo.findById(organizationId);
   if (!org) throw new DomainError('ORG_007', 'Organization not found.', 404);
+
+  /**
+   * Refuse if it is not the organization the admin was looking at.
+   *
+   * Renaming an APPROVED organization already sends it back for review.
+   * This closes the other half: renaming a PENDING one between the admin
+   * opening the queue and clicking approve, so a name they never saw
+   * carries their decision. Cheap optimistic concurrency — the queue
+   * already has the name, it just has to say so.
+   */
+  if (org.name !== body.expectedName) {
+    throw new DomainError('ORG_012', 'This organization was renamed — review it again.', 409, {
+      expected: body.expectedName,
+      actual: org.name,
+    });
+  }
 
   // A refusal a human will have to defend later should be explained now,
   // while they still remember why.

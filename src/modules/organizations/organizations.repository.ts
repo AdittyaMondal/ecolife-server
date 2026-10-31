@@ -138,6 +138,52 @@ export async function insertOrganization(tx: Executor, values: typeof organizati
   return row.id;
 }
 
+/**
+ * Applies an owner's edit, deciding IN SQL whether it re-opens the review.
+ *
+ * The decision cannot be made from a prior SELECT. An owner reads `pending`,
+ * an admin approves in the same instant, and the rename then lands on a row
+ * that is now `approved` — keeping the badge for a name no human ever saw.
+ * Making it a CASE over the row's own `status` means the comparison happens
+ * at write time, against whatever the row actually is.
+ *
+ * `IS DISTINCT FROM` rather than `<>` so a NULL on either side compares
+ * sanely: setting a website on an organization that had none is a change.
+ */
+export async function updateOrganizationChecked(
+  id: number,
+  values: Partial<typeof organizations.$inferInsert>,
+  identity: { name?: string | null; logoUrl?: string | null; websiteUrl?: string | null },
+) {
+  const changed = sql.join(
+    [
+      identity.name !== undefined ? sql`name is distinct from ${identity.name}` : null,
+      identity.logoUrl !== undefined ? sql`logo_url is distinct from ${identity.logoUrl}` : null,
+      identity.websiteUrl !== undefined
+        ? sql`website_url is distinct from ${identity.websiteUrl}`
+        : null,
+    ].filter((x): x is NonNullable<typeof x> => x !== null),
+    sql` or `,
+  );
+
+  // Nothing identity-shaped in this patch, so the approval is undisturbed.
+  if (
+    identity.name === undefined &&
+    identity.logoUrl === undefined &&
+    identity.websiteUrl === undefined
+  ) {
+    return updateOrganization(id, values);
+  }
+
+  const reopens = sql`(status = 'approved' and (${changed}))`;
+  return updateOrganization(id, {
+    ...values,
+    status: sql`case when ${reopens} then 'pending'::organization_status else status end` as never,
+    reviewedAt: sql`case when ${reopens} then null else reviewed_at end` as never,
+    reviewNote: sql`case when ${reopens} then null else review_note end` as never,
+  });
+}
+
 export async function updateOrganization(
   id: number,
   values: Partial<typeof organizations.$inferInsert>,
