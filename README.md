@@ -103,3 +103,48 @@ Read [CLAUDE.md](./CLAUDE.md) first. Before opening a PR:
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
+
+## Docker / Dokploy
+
+Verified by building and running both images locally (31/10/2026): the server
+image serves `/api/v1/health/ready` with a real Neon round-trip from inside the
+container, runs as non-root `bun` (uid 1000), and is 224 MB.
+
+```bash
+docker build -t ecolife-server .
+docker run -p 4000:4000 --env-file .env.docker ecolife-server
+```
+
+### Things that will trip you up
+
+**`docker --env-file` does not strip quotes.** `.env` here is written for
+dotenv, which does. If a value is `DATABASE_URL="postgres://…"`, Docker passes
+the quotes as part of the value and `config/env.ts` rejects it with
+`must be a postgres:// or postgresql:// connection string`. Platforms that set
+env vars through a UI (Dokploy, Vercel, Fly) are unaffected — this only bites
+local `--env-file` runs. Strip them first:
+
+```bash
+sed -E 's/^([A-Z_]+)="(.*)"$/\1=\2/' .env > .env.docker
+```
+
+**Migrations do not run on boot, deliberately.** Two replicas starting at once
+would race. Run them as a one-off release step:
+
+```bash
+docker exec <container> bun src/database/migrate.ts
+```
+
+This works in the production image because `migrate.ts` uses drizzle-orm's own
+migrator — a production dependency — not `drizzle-kit`. That is also why the
+install is `--prod`: `drizzle-kit` drags in esbuild, whose postinstall shells
+out to `node install.js`, and the Bun runtime image has no node. That
+postinstall is what broke the first hosted build.
+
+**`/docs` is absent in production** (`NODE_ENV=production`), by design — see
+`src/app.ts`. `/openapi.json` and `docs/api-reference.md` cover the same need
+without executing a third-party bundle on our own origin.
+
+**Health probes:** use `/api/v1/health` for liveness (touches nothing) and
+`/api/v1/health/ready` for readiness (hits Postgres). Pointing liveness at
+`/ready` means a transient Neon blip restarts the container into the same blip.

@@ -22,7 +22,9 @@
     "db:studio": "bun --bun drizzle-kit studio",
     "gen:openapi": "bun run scripts/gen-openapi.ts",
     "gen:openapi:check": "bun run scripts/gen-openapi.ts --check",
-    "mock": "bunx @stoplight/prism-cli@5.16.0 mock openapi.json -p 4010"
+    "mock": "bunx @stoplight/prism-cli@5.16.0 mock openapi.json -p 4010",
+    "gen:apidocs": "bun run scripts/gen-api-docs.ts",
+    "gen:apidocs:check": "bun run scripts/gen-api-docs.ts --check"
   },
   "dependencies": {
     "@hono/zod-openapi": "1.6.3",

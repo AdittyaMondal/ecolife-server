@@ -1,0 +1,30 @@
+# Keep the build context small and keep secrets out of it. A file copied into an
+# image layer is recoverable from that layer even if a later layer deletes it.
+
+.git
+.gitignore
+node_modules
+dist
+coverage
+
+# Secrets. Only .env.example is ever committed, and even that is not needed here.
+.env
+.env.*
+
+# Tooling and docs — not needed to serve a request
+test/
+**/*.spec.ts
+**/*.test.ts
+scripts/
+docs/
+*.md
+biome.json
+bunfig.toml
+.github/
+.vercelignore
+vercel.json
+api/
+public/
+
+# NOTE: src/database/migrations/ is deliberately NOT ignored. `bun
+# src/database/migrate.ts` runs inside this image and needs the SQL files.

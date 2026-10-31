@@ -83,34 +83,49 @@ app.doc31('/openapi.json', {
 });
 
 /**
- * Browsable API reference at /docs, rendered from the same document `/openapi.json`
- * serves — so it can never describe an endpoint that does not exist.
+ * Browsable API reference at /docs, rendered from the same document
+ * `/openapi.json` serves — so it can never describe an endpoint that does not
+ * exist.
  *
- * Hand-written rather than pulling in @hono/swagger-ui, which emits essentially
- * this. The renderer loads from a CDN: acceptable for a developer tool, and the
- * reason this is NOT part of the application's own CSP surface.
+ * NOT REGISTERED IN PRODUCTION. The renderer is a third-party bundle, and
+ * serving it from this origin would put a CDN inside our own trust boundary:
+ * a compromised bundle would run with access to anything same-origin. A
+ * developer convenience is not worth that, so production has no /docs route at
+ * all — `docs/api-reference.md` and `/openapi.json` cover the same need
+ * without executing anyone else's code.
+ *
+ * Where it IS registered, the script is pinned by version AND by SRI hash, so
+ * the browser refuses a bundle that does not match byte-for-byte. Regenerate
+ * the hash if the version changes:
+ *   curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
  */
-app.get('/docs', (c) =>
-  c.html(`<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>EcoLife API reference</title>
-    <style>
-      body { margin: 0; background: #0a1410; }
-    </style>
-  </head>
-  <body>
-    <script
-      id="api-reference"
-      data-url="/openapi.json"
-      data-configuration='{"theme":"alternate","hideDownloadButton":false,"defaultHttpClient":{"targetKey":"shell","clientKey":"curl"}}'
-    ></script>
-    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.25.123/dist/browser/standalone.min.js"></script>
-  </body>
-</html>`),
-);
+if (env.NODE_ENV !== 'production') {
+  app.get('/docs', (c) =>
+    c.html(`<!doctype html>
+  <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>EcoLife API reference</title>
+      <style>
+        body { margin: 0; background: #0a1410; }
+      </style>
+    </head>
+    <body>
+      <script
+        id="api-reference"
+        data-url="/openapi.json"
+        data-configuration='{"theme":"alternate","hideDownloadButton":false,"defaultHttpClient":{"targetKey":"shell","clientKey":"curl"}}'
+      ></script>
+      <script
+        src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.25.123/dist/browser/standalone.min.js"
+        integrity="sha384-ho/Mm/DEWjFqK/vckEklpeWeJkCvvKYCIZsGHS5p3EmnSoi7OWmAAtGP4U7v3bC5"
+        crossorigin="anonymous"
+      ></script>
+    </body>
+  </html>`),
+  );
+}
 
 app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
   type: 'http',
