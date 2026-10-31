@@ -20,6 +20,22 @@ import * as repo from './goals.repository.ts';
 /** Days in each period. A month is 30 and a quarter 90 — fixed, not calendar. */
 const PERIOD_DAYS = { week: 7, month: 30, quarter: 90 } as const;
 
+/**
+ * How far from today a goal may start, in the user's own timezone.
+ *
+ * `[LESSON]` Without this, `startDate: '2020-01-01'` creates a goal whose
+ * window has ALREADY ended. The next read settles it, and because the award
+ * is keyed on `goal:{id}` a fresh id means a fresh payout — so the loop
+ * "create a goal in the past, read it, collect, repeat" mints points without
+ * limit. A goal is a commitment about the future; one that starts before you
+ * made it is not a commitment at all.
+ *
+ * Yesterday is allowed because a user in a timezone ahead of the server, or
+ * one who opened the form last night, is not an attacker.
+ */
+const EARLIEST_START_OFFSET = -1;
+const LATEST_START_OFFSET = 14;
+
 export type Period = keyof typeof PERIOD_DAYS;
 export type GoalType = 'reduce_percent' | 'absolute_cap';
 
@@ -53,7 +69,16 @@ async function context(userId: number) {
  * raising it to something achievable would be deciding on the user's behalf
  * what they meant.
  */
-function freeze(body: GoalBody, baselineKgPerDay: number) {
+function freeze(body: GoalBody, baselineKgPerDay: number, today: string) {
+  const offset = daysBetween(today, body.startDate);
+  if (offset < EARLIEST_START_OFFSET || offset > LATEST_START_OFFSET) {
+    throw new DomainError('GOAL_005', 'A goal must start within the next two weeks.', 422, {
+      startDate: body.startDate,
+      earliest: addDays(today, EARLIEST_START_OFFSET),
+      latest: addDays(today, LATEST_START_OFFSET),
+    });
+  }
+
   const days = PERIOD_DAYS[body.period];
   const endDate = addDays(body.startDate, days);
   const baselineKgTotal = baselineKgPerDay * days;
@@ -69,6 +94,23 @@ function freeze(body: GoalBody, baselineKgPerDay: number) {
       throw new DomainError('GOAL_003', 'capKgPerDay is required for a daily-cap goal.', 422);
     }
     targetKgPerDay = body.capKgPerDay;
+  }
+
+  /**
+   * A target at or above your own baseline is not a goal, it is a payout.
+   *
+   * Unlogged elapsed days are charged at baseline, so a cap above baseline
+   * is met by doing nothing at all — and that is also what makes this one
+   * check sufficient: with the target strictly below baseline, a window with
+   * nothing logged sums to exactly `baselineKgTotal`, which is above target,
+   * so it settles as MISSED. Achieving a goal therefore requires logging
+   * days that actually came in under it.
+   */
+  if (targetKgPerDay >= baselineKgPerDay) {
+    throw new DomainError('GOAL_006', 'A goal has to ask for less than your baseline.', 422, {
+      targetKgPerDay: round2(targetKgPerDay),
+      baselineKgPerDay: round2(baselineKgPerDay),
+    });
   }
 
   if (targetKgPerDay < MIN_PLAUSIBLE_KG) {
@@ -182,7 +224,7 @@ export async function list(userId: number) {
 }
 
 export async function create(userId: number, body: GoalBody) {
-  const { baselineKgPerDay } = await context(userId);
+  const { user, baselineKgPerDay } = await context(userId);
 
   // Checked before the insert so the caller gets GOAL_001 rather than a
   // constraint violation. `one_active_goal_per_user` is still the real
@@ -191,7 +233,7 @@ export async function create(userId: number, body: GoalBody) {
     throw new DomainError('GOAL_001', 'You already have an active goal.', 409);
   }
 
-  const frozen = freeze(body, baselineKgPerDay);
+  const frozen = freeze(body, baselineKgPerDay, localDate(user.timezone));
   const row = await repo.insertGoal({
     userId,
     type: body.type,
@@ -205,7 +247,7 @@ export async function create(userId: number, body: GoalBody) {
 }
 
 export async function patch(userId: number, id: number, body: Partial<GoalBody>) {
-  const { baselineKgPerDay } = await context(userId);
+  const { user, baselineKgPerDay } = await context(userId);
   const existing = await repo.findOwned(userId, id);
   if (existing?.status !== 'active') {
     throw new DomainError('GOAL_004', 'No active goal with that id.', 404);
@@ -223,7 +265,7 @@ export async function patch(userId: number, id: number, body: Partial<GoalBody>)
   if (merged.type === 'reduce_percent') merged.capKgPerDay = undefined;
   else merged.reducePercent = undefined;
 
-  const frozen = freeze(merged, baselineKgPerDay);
+  const frozen = freeze(merged, baselineKgPerDay, localDate(user.timezone));
   const row = await repo.updateGoal(id, {
     type: merged.type,
     period: merged.period,

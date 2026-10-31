@@ -4,7 +4,13 @@ import { freshIpHeaders } from '@common/testing/client-ip.ts';
 import { createOnboardedUser } from '@common/testing/fixtures.ts';
 import { localDate } from '@common/time.ts';
 import { db } from '@database/client.ts';
-import { goals, lifestyleProfiles, rewardTransactions, users } from '@database/schema/index.ts';
+import {
+  dailyFootprints,
+  goals,
+  lifestyleProfiles,
+  rewardTransactions,
+  users,
+} from '@database/schema/index.ts';
 import { and, eq, sql } from 'drizzle-orm';
 import { app } from '../../src/app.ts';
 
@@ -133,12 +139,7 @@ describe('goals', () => {
   it(
     'charges unlogged elapsed days at baseline, so silence is not a win',
     async () => {
-      const { token, userId, baselinePerDay } = await onboarded();
-      // A week-long goal that started six days ago, with nothing logged.
-      const start = new Date();
-      start.setUTCDate(start.getUTCDate() - 6);
-      const startDate = start.toISOString().slice(0, 10);
-
+      const { token, userId } = await onboarded();
       const created = await json(
         await call('/goals', {
           method: 'POST',
@@ -147,17 +148,33 @@ describe('goals', () => {
             type: 'reduce_percent',
             period: 'week',
             reducePercent: 20,
-            startDate,
+            startDate: localDate(TZ),
           }),
         }),
       );
+
+      // Backdate the window so six days have elapsed with nothing logged,
+      // while the goal is still running. The API refuses a past startDate
+      // (GOAL_005), which is why this is set up through the database.
+      const start = new Date();
+      start.setUTCDate(start.getUTCDate() - 6);
+      const end = new Date();
+      end.setUTCDate(end.getUTCDate() + 1);
+      await db
+        .update(goals)
+        .set({
+          startDate: start.toISOString().slice(0, 10),
+          endDate: end.toISOString().slice(0, 10),
+        })
+        .where(eq(goals.id, created.data.id));
 
       const progress = await json(
         await call(`/goals/${created.data.id}/progress`, { headers: auth(token) }),
       );
       // Seven elapsed days at baseline, none logged. If missing days counted
       // as zero this would read 0 and the goal would look perfect.
-      expect(progress.data.actualKgTotal).toBeGreaterThan(baselinePerDay * 5);
+      expect(progress.data.actualKgTotal).toBeGreaterThan(0);
+      expect(progress.data.daysElapsed).toBeGreaterThanOrEqual(6);
       expect(progress.data.onTrack).toBe(false);
 
       // Nothing was awarded: the goal has not ended.
@@ -171,28 +188,88 @@ describe('goals', () => {
   );
 
   it(
-    'settles an expired goal lazily and pays once',
+    'refuses a goal whose window has already ended',
     async () => {
-      const { token, userId } = await onboarded();
+      const { token } = await onboarded();
+      // `[LESSON]` This is the farm: a goal that starts in the past has
+      // already finished, the next read settles it, and because the award is
+      // keyed on goal:{id} every new goal is a new payout. Create, read,
+      // collect, repeat — unbounded points.
+      const res = await call('/goals', {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({
+          type: 'reduce_percent',
+          period: 'week',
+          reducePercent: 10,
+          startDate: '2020-01-01',
+        }),
+      });
+      expect(res.status).toBe(422);
+      expect((await json(res)).error.code).toBe('GOAL_005');
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'refuses a cap at or above the baseline',
+    async () => {
+      const { token, baselinePerDay } = await onboarded();
+      // The other half of the same farm. Unlogged days are charged at
+      // baseline, so a cap above baseline is met by doing nothing — and
+      // rejecting it is what makes "achieved" require real logged days.
+      const res = await call('/goals', {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({
+          type: 'absolute_cap',
+          period: 'week',
+          capKgPerDay: Math.ceil(baselinePerDay) + 10,
+          startDate: localDate(TZ),
+        }),
+      });
+      expect(res.status).toBe(422);
+      expect((await json(res)).error.code).toBe('GOAL_006');
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'settles an expired goal lazily, pays once, and only for real logged days',
+    async () => {
+      const { token, userId, baselinePerDay } = await onboarded();
       const created = await json(
         await call('/goals', {
           method: 'POST',
           headers: auth(token),
+          // A real goal: below baseline, starting today.
           body: JSON.stringify({
             type: 'absolute_cap',
             period: 'week',
-            capKgPerDay: 50,
+            capKgPerDay: Math.max(2, Math.floor(baselinePerDay) - 1),
             startDate: localDate(TZ),
           }),
         }),
       );
+      expect(created.data.targetKgTotal).toBeLessThan(created.data.baselineKgTotal);
 
-      // Push the window into the past. A trivially generous cap with no logged
-      // days means actual (baseline x 7) lands under target (50 x 7).
+      // Move the window into the past, with footprints that genuinely came
+      // in under the cap. Backdating is only possible from a test, which is
+      // precisely what GOAL_005 now enforces over the API.
       await db
         .update(goals)
-        .set({ startDate: '2026-01-01', endDate: '2026-01-08' })
+        .set({ startDate: '2026-02-01', endDate: '2026-02-08' })
         .where(eq(goals.id, created.data.id));
+      await db.insert(dailyFootprints).values(
+        Array.from({ length: 7 }, (_, i) => ({
+          userId,
+          logDate: `2026-02-0${i + 1}`,
+          totalKg: 1.8,
+          baselineTotalKg: baselinePerDay,
+          sources: { transport: 'logged' as const },
+          factorVersion: 1,
+        })),
+      );
 
       const first = await json(await call('/goals', { headers: auth(token) }));
       expect(first.data.active).toBeNull();
@@ -205,6 +282,40 @@ describe('goals', () => {
         .from(rewardTransactions)
         .where(and(eq(rewardTransactions.userId, userId), eq(rewardTransactions.source, 'goal')));
       expect(grants?.n).toBe(1);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'settles as missed when the window passed with nothing logged',
+    async () => {
+      const { token, userId, baselinePerDay } = await onboarded();
+      const created = await json(
+        await call('/goals', {
+          method: 'POST',
+          headers: auth(token),
+          body: JSON.stringify({
+            type: 'absolute_cap',
+            period: 'week',
+            capKgPerDay: Math.max(2, Math.floor(baselinePerDay) - 1),
+            startDate: localDate(TZ),
+          }),
+        }),
+      );
+      await db
+        .update(goals)
+        .set({ startDate: '2026-03-01', endDate: '2026-03-08' })
+        .where(eq(goals.id, created.data.id));
+
+      const list = await json(await call('/goals', { headers: auth(token) }));
+      // Seven unlogged days at baseline exceed any below-baseline target, so
+      // doing nothing can never be an achievement.
+      expect(list.data.past[0].status).toBe('missed');
+      const [grants] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(rewardTransactions)
+        .where(and(eq(rewardTransactions.userId, userId), eq(rewardTransactions.source, 'goal')));
+      expect(grants?.n).toBe(0);
     },
     TIMEOUT,
   );

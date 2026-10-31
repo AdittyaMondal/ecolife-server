@@ -56,8 +56,23 @@ const TEST_EMAIL_PATTERNS = ['%@example.test', '%@example.com', '%@ecolife.inval
  */
 afterAll(async () => {
   try {
-    // Foreign keys cascade from users, so one delete takes logs, footprints,
-    // rewards, sessions and passes with it.
+    const owned = sql`select id from ${users} where ${or(
+      ...TEST_EMAIL_PATTERNS.map((p) => like(users.email, p)),
+    )}`;
+
+    // Orders FIRST, and deliberately not by cascade: `orders.user_id` is
+    // ON DELETE RESTRICT because an order is a financial record that must
+    // not vanish with an account. That is right for production and means
+    // the sweep has to clear them explicitly — order_items cascade from
+    // the order itself.
+    await db.execute(sql`delete from orders where user_id in (${owned})`);
+
+    // Products this suite created. They are RESTRICT-referenced by
+    // order_items, so they can only go after the orders above.
+    await db.execute(sql`delete from products where slug like 'test-%'`);
+
+    // Everything else cascades from users: logs, footprints, rewards,
+    // sessions, passes, addresses, goals.
     const deleted = await db
       .delete(users)
       .where(or(...TEST_EMAIL_PATTERNS.map((p) => like(users.email, p))))
@@ -71,6 +86,10 @@ afterAll(async () => {
     // cascades them. Left alone they would lock out the next run's attempts
     // on a repeated address.
     await db.execute(sql`delete from rate_limits where subject like '%@example.test%'`);
+
+    // Events hosted by a test user cascade, but one created and then left
+    // by a since-deleted host would not. Scoped to the title this suite uses.
+    await db.execute(sql`delete from events where title like 'Test Drive %'`);
   } catch (error) {
     // Never fail a green suite on cleanup. Say so loudly instead — silent
     // cleanup failure is how the debris built up unnoticed the first time.
