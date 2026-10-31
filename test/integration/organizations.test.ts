@@ -38,11 +38,20 @@ const body = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-async function approve(adminToken: string, orgId: number, expectedName: string) {
+type Identity = { name: string; logoUrl: string | null; websiteUrl: string | null };
+
+/** The identity an admin would read off the queue. */
+const identityOf = (org: Identity): Identity => ({
+  name: org.name,
+  logoUrl: org.logoUrl ?? null,
+  websiteUrl: org.websiteUrl ?? null,
+});
+
+async function approve(adminToken: string, orgId: number, expected: Identity) {
   return call(`/admin/organizations/${orgId}/review`, {
     method: 'POST',
     headers: auth(adminToken),
-    body: JSON.stringify({ decision: 'approve', note: 'test', expectedName }),
+    body: JSON.stringify({ decision: 'approve', note: 'test', expected: identityOf(expected) }),
   });
 }
 
@@ -146,7 +155,7 @@ describe('ownership boundaries', () => {
       const stranger = await createOnboardedUser();
       const admin = await createOnboardedUser({ role: 'admin' });
       const org = (await register(owner.token)).data;
-      await approve(admin.token, org.id, org.name);
+      await approve(admin.token, org.id, org);
 
       await call(`/organizations/${org.id}/members`, {
         method: 'POST',
@@ -227,7 +236,7 @@ describe('ownership boundaries', () => {
       const second = await createOnboardedUser();
       const admin = await createOnboardedUser({ role: 'admin' });
       const org = (await register(first.token)).data;
-      await approve(admin.token, org.id, org.name);
+      await approve(admin.token, org.id, org);
       await register(second.token);
 
       const res = await call(`/organizations/${org.id}/members`, {
@@ -261,7 +270,7 @@ describe('consent and identity', () => {
       expect((await json(early)).error.code).toBe('ORG_002');
 
       const admin = await createOnboardedUser({ role: 'admin' });
-      await approve(admin.token, org.id, org.name);
+      await approve(admin.token, org.id, org);
       const after = await call(`/organizations/${org.id}/members`, {
         method: 'POST',
         headers: auth(owner.token),
@@ -279,7 +288,7 @@ describe('consent and identity', () => {
       const admin = await createOnboardedUser({ role: 'admin' });
       const conscript = await createOnboardedUser();
       const org = (await register(owner.token)).data;
-      await approve(admin.token, org.id, org.name);
+      await approve(admin.token, org.id, org);
       await call(`/organizations/${org.id}/members`, {
         method: 'POST',
         headers: auth(owner.token),
@@ -341,7 +350,7 @@ describe('consent and identity', () => {
       const owner = await createOnboardedUser();
       const admin = await createOnboardedUser({ role: 'admin' });
       const org = (await register(owner.token)).data;
-      await approve(admin.token, org.id, org.name);
+      await approve(admin.token, org.id, org);
 
       // A phone number is not an identity.
       const contact = await json(
@@ -386,7 +395,7 @@ describe('consent and identity', () => {
         body: JSON.stringify({ name: newName }),
       });
 
-      const stale = await approve(admin.token, org.id, queueName);
+      const stale = await approve(admin.token, org.id, { ...org, name: queueName });
       expect(stale.status).toBe(409);
       expect((await json(stale)).error.code).toBe('ORG_012');
 
@@ -394,7 +403,7 @@ describe('consent and identity', () => {
       expect(row?.status).toBe('pending');
 
       // Looking again and approving what is actually there works.
-      expect((await approve(admin.token, org.id, newName)).status).toBe(200);
+      expect((await approve(admin.token, org.id, { ...org, name: newName })).status).toBe(200);
     },
     TIMEOUT,
   );
@@ -405,7 +414,7 @@ describe('consent and identity', () => {
       const owner = await createOnboardedUser();
       const admin = await createOnboardedUser({ role: 'admin' });
       const org = (await register(owner.token)).data;
-      await approve(admin.token, org.id, org.name);
+      await approve(admin.token, org.id, org);
 
       // The reset is decided inside the UPDATE, so it reads the row's real
       // status rather than one a prior SELECT happened to see.
@@ -452,7 +461,7 @@ describe('admin review', () => {
       const selfApprove = await call(`/admin/organizations/${org.id}/review`, {
         method: 'POST',
         headers: auth(user.token),
-        body: JSON.stringify({ decision: 'approve', expectedName: org.name }),
+        body: JSON.stringify({ decision: 'approve', expected: identityOf(org) }),
       });
       expect(selfApprove.status).toBe(403);
     },
@@ -478,7 +487,7 @@ describe('admin review', () => {
           body: JSON.stringify({
             decision: 'approve',
             note: 'GST certificate checked.',
-            expectedName: org.name,
+            expected: identityOf(org),
           }),
         }),
       );
@@ -501,7 +510,7 @@ describe('admin review', () => {
       const bare = await call(`/admin/organizations/${org.id}/review`, {
         method: 'POST',
         headers: auth(admin.token),
-        body: JSON.stringify({ decision: 'reject', expectedName: org.name }),
+        body: JSON.stringify({ decision: 'reject', expected: identityOf(org) }),
       });
       // A decision a human has to defend later should be explained now.
       expect(bare.status).toBe(422);
@@ -514,7 +523,7 @@ describe('admin review', () => {
           body: JSON.stringify({
             decision: 'reject',
             note: 'Could not verify the company.',
-            expectedName: org.name,
+            expected: identityOf(org),
           }),
         }),
       );
@@ -537,7 +546,7 @@ describe('admin review', () => {
         body: JSON.stringify({
           decision: 'suspend',
           note: 'Suspected forged documents.',
-          expectedName: org.name,
+          expected: identityOf(org),
         }),
       });
 
@@ -564,14 +573,14 @@ describe('admin review', () => {
         body: JSON.stringify({
           decision: 'suspend',
           note: 'Temporary hold.',
-          expectedName: org.name,
+          expected: identityOf(org),
         }),
       });
       const back = await json(
         await call(`/admin/organizations/${org.id}/review`, {
           method: 'POST',
           headers: auth(admin.token),
-          body: JSON.stringify({ decision: 'reinstate', expectedName: org.name }),
+          body: JSON.stringify({ decision: 'reinstate', expected: identityOf(org) }),
         }),
       );
       expect(back.data.status).toBe('approved');
@@ -601,7 +610,7 @@ describe('joining by code and roster metrics', () => {
       await call(`/admin/organizations/${org.id}/review`, {
         method: 'POST',
         headers: auth(admin.token),
-        body: JSON.stringify({ decision: 'approve' }),
+        body: JSON.stringify({ decision: 'approve', note: 'test', expected: identityOf(org) }),
       });
 
       // Now join with slug
@@ -623,7 +632,9 @@ describe('joining by code and roster metrics', () => {
         }),
       );
       expect(rosterRes.data.items.length).toBe(2);
-      const candidateInRoster = rosterRes.data.items.find((m: any) => m.user.id === candidate.userId);
+      const candidateInRoster = rosterRes.data.items.find(
+        (m: { user: { id: number } }) => m.user.id === candidate.userId,
+      );
       expect(candidateInRoster).toBeDefined();
       expect(typeof candidateInRoster.pointsTotal).toBe('number');
       expect(typeof candidateInRoster.baselineTotalKg).toBe('number');

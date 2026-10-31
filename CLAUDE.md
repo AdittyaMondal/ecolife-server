@@ -44,7 +44,7 @@ Markers used in PRD-v2:
 
 ## 2. Current state — read this before assuming something exists
 
-> **Every endpoint is implemented.** All 74 operations across 63 paths run against the
+> **Every endpoint is implemented.** All 75 operations across 64 paths run against the
 > real database. No route returns `GEN_501`, and `notImplemented()` has no call sites left.
 
 What exists:
@@ -65,7 +65,7 @@ What exists:
 - **All eleven modules**: health, auth, profile, track, goals, leaderboard, home,
   marketplace, events, reference, organizations
 - A seed (`pnpm seed`) producing 25 users, 1,440 footprints, 24 products, 6 events
-- **203 tests**, including the money path, the QR check-in flow and the anti-farming rules
+- **206 tests**, including the money path, the QR check-in flow and the anti-farming rules
 
 **What does not exist:** `src/jobs/` and `src/ws/` are still empty — no scheduler, no
 WebSocket. `POST /uploads/presign` needs `S3_BUCKET` and the `AWS_*` variables or it

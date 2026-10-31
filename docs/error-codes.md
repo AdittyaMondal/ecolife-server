@@ -114,7 +114,7 @@ rather than when the caller's access token happens to expire.
 | `ORG_009` | 422 | An organization must keep at least one owner. Removing the last one leaves it unadministrable. |
 | `ORG_010` | 422 | A rejection or suspension requires a note. |
 | `ORG_011` | 422 | Use `DELETE /organizations/me/membership` to remove yourself. |
-| `ORG_012` | 409 | The organization was renamed between opening the review queue and deciding. `details.expected` / `details.actual`. Re-read it before approving. |
+| `ORG_012` | 409 | The organization's identity (name, logo or website) changed between opening the review queue and deciding. `details.expected` / `details.actual`. Re-read it before approving. |
 
 ## Uploads
 
