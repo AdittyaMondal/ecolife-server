@@ -145,6 +145,28 @@ Error codes are `DOMAIN_NNN` and every one is registered in `docs/error-codes.md
 **Never leak an internal error message or stack to the client.** Anything that is not a
 `DomainError` becomes a generic `INTERNAL_001` 500, and the real error is logged server-side.
 
+### 4.1.1 Never trust a client-supplied IP
+
+`x-forwarded-for` and `x-real-ip` are set by whoever sends the request. Treating either as the
+client's identity hands an attacker a rate-limit bypass and a poisoned audit trail — and
+PRD-v2 §8.1 rate-limits `/auth/login` **per IP**, so this is the control standing between that
+endpoint and a brute force.
+
+The rule, for whoever implements the rate limiter (SRV-06) and the audit helper:
+
+- **Default: use the socket address** and ignore `x-forwarded-for` entirely.
+- A caller may assert an end-user IP **only** by presenting `INTERNAL_PROXY_TOKEN` in
+  `x-ecolife-internal` and the address in `x-ecolife-client-ip`. That is how `ecolife-web`'s
+  route handlers pass through the real user's IP without the browser being able to forge it.
+- If a real reverse proxy is ever put in front of this server, read XFF from the **right**,
+  skipping exactly `TRUSTED_PROXY_HOPS` entries. Never parse from the left — the leftmost
+  entries are whatever the client wrote.
+- Rate-limit keys are `userId ?? trustedIp`. Prefer `userId` wherever a route is
+  authenticated; it cannot be spoofed.
+
+A flagged review on `ecolife-web` (31/10/2026) came from forwarding the browser's own XFF
+straight through. Do not reintroduce it on either side.
+
 ### 4.2 Pooled for traffic, direct for migrations
 
 This is a Neon correctness rule, not a preference.
