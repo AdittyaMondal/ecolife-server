@@ -513,7 +513,11 @@ describe('brute force is blocked even when the guess is right', () => {
       await db.execute(sql`delete from rate_limits`);
 
       const victim = `noip-${crypto.randomUUID()}@example.test`;
-      const bucket = { name: 'auth-strict', limit: 10, windowSeconds: 900 };
+      // A smaller bucket than production's. The claim under test is that the
+      // loose fallback is CONSULTED when no IP is available, not what the
+      // ceiling happens to be — and at this latency fifty sequential charges
+      // is thirty seconds of round trips for no extra coverage.
+      const bucket = { name: 'auth-strict-noip', limit: 2, windowSeconds: 900 };
 
       // No requestIP and no trusted proxy header: the per-IP limiter skips and
       // the tight identifier+IP bucket cannot even be keyed. Before the loose

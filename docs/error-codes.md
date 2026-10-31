@@ -56,6 +56,8 @@ into the client repos' copy of this file.
 | `GOAL_002` | 422 | `endDate` must be after `startDate`. |
 | `GOAL_003` | 422 | `reducePercent` required for `reduce_percent`; `capKgPerDay` for `absolute_cap`. |
 | `GOAL_004` | 404 | No goal with that id **for this user**. A goal belonging to someone else returns this same 404, never 403.
+| `GOAL_005` | 422 | `startDate` is outside the allowed window (yesterday to 14 days ahead, in the user's timezone). A goal starting in the past has already ended, and settling it would pay out immediately. |
+| `GOAL_006` | 422 | The target is at or above the user's own baseline. Unlogged days are charged at baseline, so such a goal is met by doing nothing. |
 
 ## Events
 
@@ -68,6 +70,9 @@ into the client repos' copy of this file.
 | `EVENT_005` | 422 | Capacity reached. |
 | `EVENT_006` | 409 | Already registered. The existing pass is returned instead. |
 | `EVENT_007` | 422 | Registration closed. |
+| `EVENT_008` | 422 | An event must end after it starts. |
+| `EVENT_009` | 404 | No such event. A **draft** returns this same 404 to anyone who is not running it, so its existence is never confirmed. |
+| `EVENT_010` | 404/422 | No such user to add as co-host, or the user is already the host. |
 
 ## Marketplace
 
@@ -77,6 +82,10 @@ into the client repos' copy of this file.
 | `SHOP_002` | 422 | Discount would exceed the 20% cap. |
 | `SHOP_003` | 422 | Insufficient coins. |
 | `SHOP_004` | 409 | Duplicate order — same `idempotencyKey`. The original order is returned. |
+| `SHOP_005` | 404 | No such product, or it is no longer active. |
+| `SHOP_006` | 422 | Cart is empty. |
+| `SHOP_007` | 404 | No such delivery address **for this user**. Someone else's address returns this same 404. |
+| `SHOP_008` | 404 | No such order **for this user**. |
 
 ## Rewards
 

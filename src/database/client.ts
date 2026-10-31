@@ -27,7 +27,14 @@ const connectionString =
 
 export const pool = new Pool({
   connectionString,
-  max: 10,
+  /**
+   * Ten is right for one server process serving requests one at a time.
+   * The suite is different: it runs whole flows back to back, and several
+   * endpoints — /home most of all — fan out five or six queries at once, so
+   * ten saturates and later tests fail on connection timeouts that look like
+   * logic failures. Neon's pooler is in front either way.
+   */
+  max: env.NODE_ENV === 'test' ? 30 : 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
   allowExitOnIdle: env.NODE_ENV === 'test',

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import { freshIpHeaders } from '@common/testing/client-ip.ts';
+import { createOnboardedUser } from '@common/testing/fixtures.ts';
 import { localDate } from '@common/time.ts';
 import { db } from '@database/client.ts';
-import { dailyFootprints, dailyLogs, rewardTransactions, users } from '@database/schema/index.ts';
+import { dailyFootprints, dailyLogs, rewardTransactions } from '@database/schema/index.ts';
 import { and, eq, sql } from 'drizzle-orm';
 import { app } from '../../src/app.ts';
 
@@ -37,53 +38,14 @@ type Envelope = {
 const json = async (r: Response) => (await r.json()) as unknown as Envelope;
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 
-const STEPS = [
-  { householdSize: 4, city: 'Mumbai', regionCode: 'IN-MH', coolingUsage: 'ac_occasional' },
-  { dietType: 'vegetarian', foodWasteLevel: 'low', packagedFoodFreq: 'sometimes' },
-  {
-    primaryCommuteMode: 'car',
-    vehicleFuel: 'petrol',
-    commuteDistanceKm: 20,
-    flightsPerYear: 2,
-  },
-  {
-    electricityKwhMonth: 300,
-    electricityBillInr: null,
-    kwhSource: 'reported',
-    cookingFuel: 'lpg',
-    hasSolar: false,
-  },
-  { waterUsageLevel: 'high', wasteHabit: 'none' },
-] as const;
-
-/** A fully onboarded, verified user with a baseline to beat. */
+/**
+ * The subject here is the daily log, not the onboarding wizard — which
+ * profile.test.ts drives through HTTP. The fixture inserts an onboarded user
+ * in one round trip instead of eight.
+ */
 async function onboarded() {
-  const addr = `track-${crypto.randomUUID()}@example.test`;
-  const reg = await json(
-    await call('/auth/register', {
-      method: 'POST',
-      headers: { 'x-ecolife-platform': 'ios' },
-      body: JSON.stringify({ name: 'Track Probe', email: addr, password: PW }),
-    }),
-  );
-  const userId = reg.data.user.id as number;
-  const token = reg.data.session.accessToken as string;
-  await db
-    .update(users)
-    .set({ emailVerifiedAt: new Date(), timezone: TZ })
-    .where(eq(users.id, userId));
-
-  for (const [i, payload] of STEPS.entries()) {
-    await call(`/profile/onboarding/step/${i + 1}`, {
-      method: 'PATCH',
-      headers: auth(token),
-      body: JSON.stringify(payload),
-    });
-  }
-  const done = await json(
-    await call('/profile/onboarding/complete', { method: 'POST', headers: auth(token) }),
-  );
-  return { token, userId, baseline: done.data.baseline.totalKg as number };
+  const fx = await createOnboardedUser();
+  return { token: fx.token, userId: fx.userId, baseline: fx.baselinePerDay };
 }
 
 const GREEN_DAY = {
@@ -107,11 +69,14 @@ describe('GET /track/today', () => {
       expect(body.data.existingLog).toBeNull();
       expect(body.data.askCooling).toBe(true);
       // One way at onboarding, so a normal day is out and back.
+      // The fixture commutes 18 km each way by car.
       expect(body.data.defaults.trips).toEqual([
-        { mode: 'car', km: 20 },
-        { mode: 'car', km: 20 },
+        { mode: 'car', km: 18 },
+        { mode: 'car', km: 18 },
       ]);
-      expect(body.data.defaults.vegMeals).toBe(3);
+      // The fixture eats non-veg daily, so that is what the prefill offers.
+      expect(body.data.defaults.nonVegMeals).toBe(3);
+      expect(body.data.defaults.vegMeals).toBeUndefined();
     },
     TIMEOUT,
   );

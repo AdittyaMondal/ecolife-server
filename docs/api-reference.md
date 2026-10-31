@@ -802,7 +802,6 @@ Recomputes and re-freezes the target.
 |---|---|---|
 | `200` | Addresses | object |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/addresses`
 
@@ -830,7 +829,6 @@ Recomputes and re-freezes the target.
 | `201` | Created | [`Address`](#address) |
 | `400` | Validation failed | null |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `DELETE` `/api/v1/addresses/{id}`
 
@@ -851,7 +849,6 @@ Recomputes and re-freezes the target.
 | `200` | Deleted | object |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `PATCH` `/api/v1/addresses/{id}`
 
@@ -885,7 +882,6 @@ Recomputes and re-freezes the target.
 | `200` | Updated | [`Address`](#address) |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/marketplace/cart`
 
@@ -899,7 +895,6 @@ Recomputes and re-freezes the target.
 |---|---|---|
 | `200` | Cart | [`CartQuote`](#cartquote) |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/marketplace/cart/items`
 
@@ -922,7 +917,6 @@ Recomputes and re-freezes the target.
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
 | `422` | Domain rule violation | null |
-| `501` | Not implemented yet | null |
 
 ### `DELETE` `/api/v1/marketplace/cart/items/{id}`
 
@@ -942,7 +936,6 @@ Recomputes and re-freezes the target.
 |---|---|---|
 | `200` | Cart | [`CartQuote`](#cartquote) |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `PATCH` `/api/v1/marketplace/cart/items/{id}`
 
@@ -969,7 +962,6 @@ Recomputes and re-freezes the target.
 | `200` | Cart | [`CartQuote`](#cartquote) |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/marketplace/cart/preview`
 
@@ -992,7 +984,6 @@ Drives the coin slider. discount = min(offered/10 x 100, 20% of subtotal, wallet
 | `200` | Quote | [`CartQuote`](#cartquote) |
 | `401` | Not authenticated | null |
 | `422` | Domain rule violation | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/marketplace/orders`
 
@@ -1013,7 +1004,6 @@ Drives the coin slider. discount = min(offered/10 x 100, 20% of subtotal, wallet
 |---|---|---|
 | `200` | Orders | object |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/marketplace/orders`
 
@@ -1041,7 +1031,6 @@ One transaction: decrement stock, insert the order with price snapshots, debit c
 | `409` | Conflict | null |
 | `422` | Domain rule violation | null |
 | `429` | Rate limited — see Retry-After | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/marketplace/orders/{id}`
 
@@ -1062,7 +1051,6 @@ One transaction: decrement stock, insert the order with price snapshots, debit c
 | `200` | Order | [`Order`](#order) |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/marketplace/products`
 
@@ -1086,7 +1074,6 @@ One transaction: decrement stock, insert the order with price snapshots, debit c
 |---|---|---|
 | `200` | Products | object |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/marketplace/products/{slug}`
 
@@ -1106,7 +1093,6 @@ One transaction: decrement stock, insert the order with price snapshots, debit c
 |---|---|---|
 | `200` | Product | [`Product`](#product) |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ---
 
@@ -1155,7 +1141,6 @@ The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
 | `200` | Events | object |
 | `400` | Validation failed | null |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/events`
 
@@ -1189,7 +1174,6 @@ The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
 | `400` | Validation failed | null |
 | `401` | Not authenticated | null |
 | `422` | Domain rule violation | null |
-| `501` | Not implemented yet | null |
 
 ### `PATCH` `/api/v1/events/{id}`
 
@@ -1229,7 +1213,6 @@ The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
 | `401` | Not authenticated | null |
 | `403` | Not authorised | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/events/{id}/cancel`
 
@@ -1250,7 +1233,6 @@ The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
 | `200` | Cancelled | [`Event`](#event) |
 | `401` | Not authenticated | null |
 | `403` | Not authorised | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/events/{id}/co-hosts`
 
@@ -1278,7 +1260,6 @@ The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
 | `401` | Not authenticated | null |
 | `403` | Not authorised | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `DELETE` `/api/v1/events/{id}/co-hosts/{userId}`
 
@@ -1300,7 +1281,6 @@ The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
 | `200` | Removed | [`Event`](#event) |
 | `401` | Not authenticated | null |
 | `403` | Not authorised | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/events/{id}/manual-check-in`
 
@@ -1329,7 +1309,6 @@ The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
 | `403` | Not authorised | null |
 | `404` | Not found | null |
 | `422` | Domain rule violation | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/events/{id}/participants`
 
@@ -1352,7 +1331,6 @@ A participant list is personal data. Non-hosts get 403 — it is never public.
 | `200` | Participants | [`EventParticipantList`](#eventparticipantlist) |
 | `401` | Not authenticated | null |
 | `403` | Not authorised | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/events/{id}/pass`
 
@@ -1375,7 +1353,6 @@ Only ever returns the caller's own pass. Cache it on device for offline display.
 | `200` | Pass | [`EventPass`](#eventpass) |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `DELETE` `/api/v1/events/{id}/register`
 
@@ -1396,7 +1373,6 @@ Only ever returns the caller's own pass. Cache it on device for offline display.
 | `200` | Cancelled | object |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/events/{id}/register`
 
@@ -1421,7 +1397,6 @@ Idempotent: registering twice returns the existing pass. Closes at start + 1h or
 | `404` | Not found | null |
 | `409` | Conflict | null |
 | `422` | Domain rule violation | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/events/{id}/scan`
 
@@ -1462,7 +1437,6 @@ Seven ordered checks (PRD-v2 §6.6.4):
 | `404` | Not found | null |
 | `422` | Domain rule violation | null |
 | `429` | Rate limited — see Retry-After | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/events/{slug}`
 
@@ -1483,7 +1457,6 @@ Seven ordered checks (PRD-v2 §6.6.4):
 | `200` | Event | [`Event`](#event) |
 | `403` | Not authorised | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ---
 
