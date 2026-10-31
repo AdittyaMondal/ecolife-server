@@ -44,7 +44,7 @@ Markers used in PRD-v2:
 
 ## 2. Current state — read this before assuming something exists
 
-> **Every endpoint is implemented.** All 65 operations across 55 paths run against the
+> **Every endpoint is implemented.** All 73 operations across 62 paths run against the
 > real database. No route returns `GEN_501`, and `notImplemented()` has no call sites left.
 
 What exists:
@@ -62,10 +62,10 @@ What exists:
 - The carbon engine: baseline AND daily, `src/common/carbon/`
 - The reward ledger, `src/common/rewards/` — every earn and spend goes through `award()`
 - Neon Object Storage, `src/common/storage/`
-- **All ten modules**: health, auth, profile, track, goals, leaderboard, home,
-  marketplace, events, reference
+- **All eleven modules**: health, auth, profile, track, goals, leaderboard, home,
+  marketplace, events, reference, organizations
 - A seed (`pnpm seed`) producing 25 users, 1,440 footprints, 24 products, 6 events
-- **185 tests**, including the money path, the QR check-in flow and the anti-farming rules
+- **198 tests**, including the money path, the QR check-in flow and the anti-farming rules
 
 **What does not exist:** `src/jobs/` and `src/ws/` are still empty — no scheduler, no
 WebSocket. `POST /uploads/presign` needs `S3_BUCKET` and the `AWS_*` variables or it
@@ -75,6 +75,10 @@ Known gaps, written down rather than discovered later:
 
 - `invite_only` events are UNLISTED, not access-controlled. There is no invitations
   table, so anyone who learns a slug can still join one.
+- An organization member is ADDED by an owner, not invited: the person is enrolled
+  without being asked. An invitation/accept flow needs a table that does not exist.
+- `requireOrgRole` is now used by the organizations module itself, but no marketplace
+  or events route is gated on organization type yet — the Seller Portal is deferred.
 - A goal that settles while the user is unverified is never paid, even after they
   verify. Settlement is one-shot and there is no pending-rewards concept.
 - `contentType` on an upload is a client claim. Magic-byte verification after upload
@@ -104,7 +108,7 @@ outside those domains.
 | `pnpm gen:openapi` | Regenerate `openapi.json` from the route definitions |
 | `pnpm gen:openapi:check` | Fail if `openapi.json` is stale (CI) |
 | `pnpm mock` | Prism mock of `openapi.json` on :4010 — what the clients build against |
-| `pnpm grant-role` | Grants the roles that have no HTTP route yet — `admin`, and organization membership. See §2. |
+| `pnpm grant-role` | Grants `admin`, which still has no HTTP route. Organizations now have one (`POST /organizations`). |
 
 `npm run <script>` also works; dependencies are installed with **pnpm**.
 

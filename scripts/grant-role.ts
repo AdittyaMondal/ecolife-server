@@ -9,18 +9,19 @@ import { eq, sql } from 'drizzle-orm';
  * over the API and two are not:
  *
  *   users.role                 admin      -> NO route. This script.
- *   organizations.type         industry   -> NO route. This script.
- *   organization_members.role  owner      -> NO route. This script.
+ *   organizations.type         industry   -> POST /organizations (lands pending)
+ *   organization_members.role  owner      -> POST /organizations/{id}/members
  *   event_hosts.role           host       -> POST /events makes you the host
  *                              co_host    -> POST /events/{id}/co-hosts
  *
- * The organization module was never specified in PRD-v2, so its tables,
- * enums, guard (`requireOrgRole`) and error codes all exist while no
- * endpoint does. Until that module ships, this is the supported way to
- * create a corporate/community/seller account — deliberately a script and
- * not a hidden endpoint, because "anyone can self-serve an approved
- * organization" is exactly what the pending/approved workflow exists to
- * prevent.
+ * `admin` deliberately has no endpoint: a route that grants staff access is
+ * a route worth attacking, and promoting someone is rare enough to be worth
+ * shell access.
+ *
+ * The --org flags remain useful for seeding a PRE-APPROVED organization in
+ * one step. Through the API an organization correctly lands `pending` and
+ * needs an admin, which is the right default and the wrong amount of
+ * ceremony for a local fixture.
  *
  *   bun scripts/grant-role.ts --email a@b.c --admin
  *   bun scripts/grant-role.ts --email a@b.c --org "Acme Ltd" --type industry

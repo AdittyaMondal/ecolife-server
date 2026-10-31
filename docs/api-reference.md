@@ -4,7 +4,7 @@
 > Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
 > fails CI when this file is stale.
 
-**Version** 0.1.0 · **Base path** `/api/v1` · **55 paths** · **65 operations** · **82 schemas**
+**Version** 0.1.0 · **Base path** `/api/v1` · **62 paths** · **73 operations** · **90 schemas**
 
 ---
 
@@ -69,6 +69,7 @@ an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` acce
 - [leaderboard](#leaderboard) — 2 operations
 - [marketplace](#marketplace) — 14 operations
 - [events](#events) — 13 operations
+- [organizations](#organizations) — 8 operations
 - [reference](#reference) — 5 operations
 - [carbon](#carbon) — 1 operation
 - [Schemas](#schemas)
@@ -1463,6 +1464,238 @@ Seven ordered checks (PRD-v2 §6.6.4):
 
 ---
 
+## organizations
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/admin/organizations`](#get-api-v1-admin-organizations) 🔒 | Review queue (admin only) |
+| `POST` | [`/api/v1/admin/organizations/{id}/review`](#post-api-v1-admin-organizations-id-review) 🔒 | Approve, reject, suspend or reinstate (admin only) |
+| `POST` | [`/api/v1/organizations`](#post-api-v1-organizations) 🔒 | Register an organization |
+| `PATCH` | [`/api/v1/organizations/{id}`](#patch-api-v1-organizations-id) 🔒 | Edit an organization (owner only) |
+| `GET` | [`/api/v1/organizations/{id}/members`](#get-api-v1-organizations-id-members) 🔒 | Roster — any member may read it |
+| `POST` | [`/api/v1/organizations/{id}/members`](#post-api-v1-organizations-id-members) 🔒 | Add a member by email (owner only) |
+| `DELETE` | [`/api/v1/organizations/{id}/members/{userId}`](#delete-api-v1-organizations-id-members-userid) 🔒 | Remove a member (owner only) |
+| `GET` | [`/api/v1/organizations/me`](#get-api-v1-organizations-me) 🔒 | The caller's own organization, if any |
+
+### `GET` `/api/v1/admin/organizations`
+
+**Review queue (admin only)**
+
+🔒 Requires a bearer token.
+
+Filter by `status=pending` for the queue. `reviewNote` is visible here only.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `status` | query | no | `pending` \| `approved` \| `rejected` \| `suspended` | e.g. `"pending"` |
+| `type` | query | no | `industry` \| `ngo` \| `seller` | e.g. `"industry"` |
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Organizations | object |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `POST` `/api/v1/admin/organizations/{id}/review`
+
+**Approve, reject, suspend or reinstate (admin only)**
+
+🔒 Requires a bearer token.
+
+A rejection or suspension requires a note — a decision a human has to defend later should be explained while they still remember why.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required) — [`ReviewOrganizationBody`](#revieworganizationbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `decision` | `approve` \| `reject` \| `suspend` \| `reinstate` | yes | e.g. `"approve"` |
+| `note` | string | no | e.g. `"GST certificate checked."` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Reviewed | [`Organization`](#organization) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `422` | Domain rule violation | null |
+
+### `POST` `/api/v1/organizations`
+
+**Register an organization**
+
+🔒 Requires a bearer token.
+
+Creates it as `pending` and makes the caller its owner. It stays unusable until an admin approves it — anyone can claim to be a corporate partner at signup.
+
+**Request body** (required) — [`CreateOrganizationBody`](#createorganizationbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | yes | e.g. `"Acme Industries"` |
+| `type` | `industry` \| `ngo` \| `seller` | yes | Corporate · Community · Seller portal. e.g. `"industry"` |
+| `description` | string | no |  |
+| `websiteUrl` | string (uri) | no |  |
+| `contactEmail` | string (email) | no |  |
+| `contactPhone` | string | no |  |
+| `city` | string | no |  |
+| `regionCode` | string | no |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `201` | Created, pending review | [`Organization`](#organization) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `409` | Conflict | null |
+
+### `PATCH` `/api/v1/organizations/{id}`
+
+**Edit an organization (owner only)**
+
+🔒 Requires a bearer token.
+
+`type` and `status` are deliberately not editable: a seller must not re-badge itself as an NGO after approval, and nobody approves themselves.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** — [`UpdateOrganizationBody`](#updateorganizationbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | no | e.g. `"Acme Industries"` |
+| `description` | string | no |  |
+| `websiteUrl` | string (uri) | no |  |
+| `contactEmail` | string (email) | no |  |
+| `contactPhone` | string | no |  |
+| `city` | string | no |  |
+| `regionCode` | string | no |  |
+| `logoUrl` | string,null (uri) | no |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Updated | [`Organization`](#organization) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `409` | Conflict | null |
+
+### `GET` `/api/v1/organizations/{id}/members`
+
+**Roster — any member may read it**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Members | [`OrganizationMemberList`](#organizationmemberlist) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+### `POST` `/api/v1/organizations/{id}/members`
+
+**Add a member by email (owner only)**
+
+🔒 Requires a bearer token.
+
+The person must already have an account. One organization per user.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required) — [`AddOrganizationMemberBody`](#addorganizationmemberbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email` | string (email) | yes | Must already have an account. e.g. `"colleague@acme.example.com"` |
+| `role` | `owner` \| `member` | no | e.g. `"owner"`. default `"member"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Members after the change | [`OrganizationMemberList`](#organizationmemberlist) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `409` | Conflict | null |
+
+### `DELETE` `/api/v1/organizations/{id}/members/{userId}`
+
+**Remove a member (owner only)**
+
+🔒 Requires a bearer token.
+
+The last owner cannot be removed — that would orphan the organization.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `7` |
+| `userId` | path | yes | integer | e.g. `9` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Members after the change | [`OrganizationMemberList`](#organizationmemberlist) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `422` | Domain rule violation | null |
+
+### `GET` `/api/v1/organizations/me`
+
+**The caller's own organization, if any**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Own organization, or nulls | [`MyOrganization`](#myorganization) |
+| `401` | Not authenticated | null |
+
+---
+
 ## reference
 
 | | Endpoint | Summary |
@@ -1597,7 +1830,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 
 ## Schemas
 
-82 named components.
+90 named components.
 
 ### ActiveGoalSummary
 
@@ -1615,6 +1848,13 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `productId` | integer | yes | e.g. `12` |
 | `quantity` | integer | no | e.g. `1`. range 1…20. default `1` |
+
+### AddOrganizationMemberBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email` | string (email) | yes | Must already have an account. e.g. `"colleague@acme.example.com"` |
+| `role` | `owner` \| `member` | no | e.g. `"owner"`. default `"member"` |
 
 ### Address
 
@@ -1750,6 +1990,19 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `reducePercent` | number | no | Required when type is reduce_percent. e.g. `15`. range 1…90 |
 | `capKgPerDay` | number | no | Required when type is absolute_cap. range 0.5…100 |
 | `startDate` | string | yes | e.g. `"2026-11-01"` |
+
+### CreateOrganizationBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | yes | e.g. `"Acme Industries"` |
+| `type` | `industry` \| `ngo` \| `seller` | yes | Corporate · Community · Seller portal. e.g. `"industry"` |
+| `description` | string | no |  |
+| `websiteUrl` | string (uri) | no |  |
+| `contactEmail` | string (email) | no |  |
+| `contactPhone` | string | no |  |
+| `city` | string | no |  |
+| `regionCode` | string | no |  |
 
 ### DailyAnswers
 
@@ -2018,6 +2271,13 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `caveat` | string | yes | e.g. `"Published averages, not measurements. India-weighted where India-specific data exists."` |
 | `factors` | [`EmissionFactor`](#emissionfactor)[] | yes |  |
 
+### MyOrganization
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `organization` | [`Organization`](#organization) \| null | yes |  |
+| `role` | `owner` \| `member` \| null | yes |  |
+
 ### MyRank
 
 | Field | Type | Required | Notes |
@@ -2158,6 +2418,42 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `address` | [`Address`](#address) \| null | yes |  |
 | `createdAt` | string | yes | e.g. `"2026-10-31T10:02:00.000Z"` |
 
+### Organization
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `7` |
+| `slug` | string | yes | e.g. `"acme-industries"` |
+| `name` | string | yes | e.g. `"Acme Industries"` |
+| `type` | `industry` \| `ngo` \| `seller` | yes | Corporate · Community · Seller portal. e.g. `"industry"` |
+| `status` | `pending` \| `approved` \| `rejected` \| `suspended` | yes | e.g. `"pending"` |
+| `description` | string,null | yes | e.g. `"Packaging, 400 staff in Pune."` |
+| `logoUrl` | string,null | yes |  |
+| `websiteUrl` | string,null | yes | e.g. `"https://acme.example.com"` |
+| `contactEmail` | string,null | yes | e.g. `"green@acme.example.com"` |
+| `contactPhone` | string,null | yes | e.g. `"+912012345678"` |
+| `city` | string,null | yes | e.g. `"Pune"` |
+| `regionCode` | string,null | yes | e.g. `"IN-MH"` |
+| `memberCount` | integer | yes | e.g. `12` |
+| `reviewNote` | string,null | yes |  |
+| `reviewedAt` | string,null | yes |  |
+| `createdAt` | string | yes | e.g. `"2026-11-01T09:00:00.000Z"` |
+
+### OrganizationMember
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `user` | [`UserSummary`](#usersummary) | yes |  |
+| `role` | `owner` \| `member` | yes | e.g. `"owner"` |
+| `joinedAt` | string | yes | e.g. `"2026-11-01T09:00:00.000Z"` |
+
+### OrganizationMemberList
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `organization` | [`Organization`](#organization) | yes |  |
+| `items` | [`OrganizationMember`](#organizationmember)[] | yes |  |
+
 ### OwnProfile
 
 | Field | Type | Required | Notes |
@@ -2281,6 +2577,13 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `token` | string | yes |  |
 | `password` | string | yes | e.g. `"correct horse battery"` |
 
+### ReviewOrganizationBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `decision` | `approve` \| `reject` \| `suspend` \| `reinstate` | yes | e.g. `"approve"` |
+| `note` | string | no | e.g. `"GST certificate checked."` |
+
 ### RewardEntry
 
 | Field | Type | Required | Notes |
@@ -2375,6 +2678,19 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `mode` | `walk` \| `cycle` \| `bus` \| `metro_train` \| `two_wheeler` \| `car` \| `cab` \| `auto_rickshaw` \| `work_from_home` | yes | e.g. `"bus"` |
 | `km` | number | yes | e.g. `14.5`. range 0…500 |
+
+### UpdateOrganizationBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | no | e.g. `"Acme Industries"` |
+| `description` | string | no |  |
+| `websiteUrl` | string (uri) | no |  |
+| `contactEmail` | string (email) | no |  |
+| `contactPhone` | string | no |  |
+| `city` | string | no |  |
+| `regionCode` | string | no |  |
+| `logoUrl` | string,null (uri) | no |  |
 
 ### UserSummary
 
