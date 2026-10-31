@@ -1,0 +1,2426 @@
+# EcoLife API reference
+
+> **Generated from `openapi.json` — do not edit by hand.**
+> Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
+> fails CI when this file is stale.
+
+**Version** 0.1.0 · **Base path** `/api/v1` · **55 paths** · **65 operations** · **79 schemas**
+
+---
+
+## Before you read this
+
+**This is the contract, not the behaviour.** Every endpoint below is declared, typed
+and documented. Only `/health` is implemented today — every other route returns
+`GEN_501` on the real server. Develop against the Prism mock, which serves the
+examples in this document:
+
+```bash
+cd ecolife-server && pnpm mock      # :4010, every endpoint answers
+pnpm dev                            # :4000, only /health answers
+```
+
+Point a client at one or the other with a single env var — `NEXT_PUBLIC_API_URL`
+on web, `EXPO_PUBLIC_API_URL` on mobile. No code change.
+
+### The envelope
+
+Every response, success or failure, uses one shape:
+
+```json
+{ "status": true,  "data": { }, "error": null }
+{ "status": false, "data": null, "error": { "code": "GOAL_001", "message": "…", "details": {} } }
+```
+
+The tables below describe the **`data`** payload. `status` and `error` are always present.
+
+**Branch on `error.code`, never on `error.message`.** Messages are user-facing copy and
+will be reworded and translated; codes are stable. The registry is
+[`docs/error-codes.md`](./error-codes.md).
+
+### Auth
+
+Endpoints marked 🔒 require `Authorization: Bearer <accessToken>`. The access token is a
+15-minute JWT from `POST /auth/login`; refresh rotates it. Web keeps the refresh token in
+an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` accepts either.
+
+### Conventions
+
+- All money is an integer in **paise**. No float ever touches a price.
+- All emissions are **kg CO₂e**, `double precision`.
+- Dates are `YYYY-MM-DD` and mean the **user's local date**, resolved from their timezone.
+- Timestamps are ISO 8601 UTC.
+- Lists are **keyset paginated**: `?cursor=&limit=` in, `{ items, pageInfo }` out.
+- Mutations accept an `Idempotency-Key` header; some take an explicit idempotency field.
+
+---
+
+## Contents
+
+- [health](#health) — 2 operations
+- [auth](#auth) — 9 operations
+- [profile](#profile) — 9 operations
+- [home](#home) — 1 operation
+- [track](#track) — 4 operations
+- [goals](#goals) — 5 operations
+- [leaderboard](#leaderboard) — 2 operations
+- [marketplace](#marketplace) — 14 operations
+- [events](#events) — 13 operations
+- [reference](#reference) — 5 operations
+- [carbon](#carbon) — 1 operation
+- [Schemas](#schemas)
+
+---
+
+## health
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/health`](#get-api-v1-health)  | Liveness probe |
+| `GET` | [`/api/v1/health/ready`](#get-api-v1-health-ready)  | Readiness probe — verifies the database is reachable |
+
+### `GET` `/api/v1/health`
+
+**Liveness probe**
+
+🔓 No authentication.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Service is up | [`Liveness`](#liveness) |
+
+### `GET` `/api/v1/health/ready`
+
+**Readiness probe — verifies the database is reachable**
+
+🔓 No authentication.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Database reachable | [`Readiness`](#readiness) |
+| `503` | Database unreachable | null |
+
+---
+
+## auth
+
+| | Endpoint | Summary |
+|---|---|---|
+| `POST` | [`/api/v1/auth/forgot-password`](#post-api-v1-auth-forgot-password)  | Request a password reset link |
+| `POST` | [`/api/v1/auth/login`](#post-api-v1-auth-login)  | Exchange credentials for a session |
+| `POST` | [`/api/v1/auth/logout`](#post-api-v1-auth-logout) 🔒 | Revoke the current session family |
+| `GET` | [`/api/v1/auth/me`](#get-api-v1-auth-me) 🔒 | Current user, onboarding state and wallet |
+| `POST` | [`/api/v1/auth/refresh`](#post-api-v1-auth-refresh)  | Rotate the refresh token |
+| `POST` | [`/api/v1/auth/register`](#post-api-v1-auth-register)  | Create an account and start a session |
+| `POST` | [`/api/v1/auth/resend-verification`](#post-api-v1-auth-resend-verification) 🔒 | Resend the verification email |
+| `POST` | [`/api/v1/auth/reset-password`](#post-api-v1-auth-reset-password)  | Set a new password from a reset token |
+| `POST` | [`/api/v1/auth/verify-email`](#post-api-v1-auth-verify-email)  | Consume an email verification token |
+
+### `POST` `/api/v1/auth/forgot-password`
+
+**Request a password reset link**
+
+🔓 No authentication.
+
+Always 200, whether or not the address exists — it must not leak registration.
+
+**Request body** (required) — [`ForgotPasswordBody`](#forgotpasswordbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email` | string (email) | yes | e.g. `"yusuf@example.com"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Accepted | [`OkMessage`](#okmessage) |
+| `429` | Rate limited — see Retry-After | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/auth/login`
+
+**Exchange credentials for a session**
+
+🔓 No authentication.
+
+Failures are deliberately indistinguishable between unknown and wrong-password.
+
+**Request body** (required) — [`LoginBody`](#loginbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email` | string (email) | yes | e.g. `"yusuf@example.com"` |
+| `password` | string | yes | e.g. `"correct horse battery"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Signed in | [`AuthResult`](#authresult) |
+| `401` | Not authenticated | null |
+| `429` | Rate limited — see Retry-After | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/auth/logout`
+
+**Revoke the current session family**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Signed out | [`OkMessage`](#okmessage) |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/auth/me`
+
+**Current user, onboarding state and wallet**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | The authenticated user | [`Me`](#me) |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/auth/refresh`
+
+**Rotate the refresh token**
+
+🔓 No authentication.
+
+Accepts the token from the httpOnly cookie (web) or the body (mobile). Rotates on every use; a replayed token revokes the whole family.
+
+**Request body** — [`RefreshBody`](#refreshbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `refreshToken` | string | no | Mobile sends this. Web sends the httpOnly cookie instead. |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Rotated | [`Session`](#session) |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/auth/register`
+
+**Create an account and start a session**
+
+🔓 No authentication.
+
+Rate limited to 10 per 15 minutes per IP and per email. Email verification is required before any reward can be earned (PRD-v2 §4.4).
+
+**Request body** (required) — [`RegisterBody`](#registerbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | yes | e.g. `"Yusuf"` |
+| `email` | string (email) | yes | e.g. `"yusuf@example.com"` |
+| `password` | string | yes | e.g. `"correct horse battery"` |
+| `phone` | string | no | e.g. `"+919876543210"` |
+| `timezone` | string | no | e.g. `"Asia/Kolkata"`. default `"Asia/Kolkata"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `201` | Account created | [`AuthResult`](#authresult) |
+| `400` | Validation failed | null |
+| `409` | Conflict | null |
+| `429` | Rate limited — see Retry-After | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/auth/resend-verification`
+
+**Resend the verification email**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Sent | [`OkMessage`](#okmessage) |
+| `429` | Rate limited — see Retry-After | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/auth/reset-password`
+
+**Set a new password from a reset token**
+
+🔓 No authentication.
+
+Revokes every existing session for the user on success.
+
+**Request body** (required) — [`ResetPasswordBody`](#resetpasswordbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `token` | string | yes |  |
+| `password` | string | yes | e.g. `"correct horse battery"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Password changed | [`OkMessage`](#okmessage) |
+| `422` | Domain rule violation | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/auth/verify-email`
+
+**Consume an email verification token**
+
+🔓 No authentication.
+
+**Request body** (required) — [`VerifyEmailBody`](#verifyemailbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `token` | string | yes | e.g. `"a1b2c3…"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Verified | [`OkMessage`](#okmessage) |
+| `422` | Domain rule violation | null |
+| `501` | Not implemented yet | null |
+
+---
+
+## profile
+
+| | Endpoint | Summary |
+|---|---|---|
+| `DELETE` | [`/api/v1/profile`](#delete-api-v1-profile) 🔒 | Delete account |
+| `GET` | [`/api/v1/profile`](#get-api-v1-profile) 🔒 | Own profile |
+| `PATCH` | [`/api/v1/profile`](#patch-api-v1-profile) 🔒 | Edit lifestyle answers or settings |
+| `GET` | [`/api/v1/profile/export`](#get-api-v1-profile-export) 🔒 | Full data export |
+| `GET` | [`/api/v1/profile/onboarding`](#get-api-v1-profile-onboarding) 🔒 | Partial onboarding answers, for resuming |
+| `POST` | [`/api/v1/profile/onboarding/complete`](#post-api-v1-profile-onboarding-complete) 🔒 | Validate all 15 answers, compute the baseline, award the completion reward |
+| `PATCH` | [`/api/v1/profile/onboarding/step/{n}`](#patch-api-v1-profile-onboarding-step-n) 🔒 | Persist one wizard step (1–5) |
+| `GET` | [`/api/v1/profile/rewards`](#get-api-v1-profile-rewards) 🔒 | Points and coins ledger |
+| `GET` | [`/api/v1/users/{id}`](#get-api-v1-users-id) 🔒 | Another user's public profile |
+
+### `DELETE` `/api/v1/profile`
+
+**Delete account**
+
+🔒 Requires a bearer token.
+
+Soft-deletes, anonymises PII, and hard-deletes uploads within 30 days.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Scheduled for deletion | object |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/profile`
+
+**Own profile**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Own profile | [`OwnProfile`](#ownprofile) |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `PATCH` `/api/v1/profile`
+
+**Edit lifestyle answers or settings**
+
+🔒 Requires a bearer token.
+
+Recomputes the baseline forward only. Past daily_footprints rows carry their own baseline snapshot, so history never changes retroactively (PRD-v2 §3.3).
+
+**Request body** — [`ProfilePatchBody`](#profilepatchbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | no |  |
+| `timezone` | string | no |  |
+| `avatarUrl` | string,null | no |  |
+| `answers` | [`OnboardingAnswers`](#onboardinganswers) | no |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Updated | [`OwnProfile`](#ownprofile) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/profile/export`
+
+**Full data export**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Everything we hold | [`DataExport`](#dataexport) |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/profile/onboarding`
+
+**Partial onboarding answers, for resuming**
+
+🔒 Requires a bearer token.
+
+Any device resumes where another left off — the wizard is server-persisted.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Current onboarding state | [`OnboardingState`](#onboardingstate) |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/profile/onboarding/complete`
+
+**Validate all 15 answers, compute the baseline, award the completion reward**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Baseline computed | [`OnboardingCompleteResult`](#onboardingcompleteresult) |
+| `401` | Not authenticated | null |
+| `409` | Conflict | null |
+| `422` | Domain rule violation | null |
+| `501` | Not implemented yet | null |
+
+### `PATCH` `/api/v1/profile/onboarding/step/{n}`
+
+**Persist one wizard step (1–5)**
+
+🔒 Requires a bearer token.
+
+Each step is its own request so a dropped connection never loses the whole form. v1 kept all 32 inputs in one DOM form and persisted nothing until final submit.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `n` | path | yes | integer | e.g. `3` |
+
+**Request body** (required) — [`OnboardingStepBody`](#onboardingstepbody)
+
+_See the schema._
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Step saved | [`OnboardingState`](#onboardingstate) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `409` | Conflict | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/profile/rewards`
+
+**Points and coins ledger**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | e.g. `20`. default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Ledger page | object |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/users/{id}`
+
+**Another user's public profile**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Public profile | [`PublicProfile`](#publicprofile) |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+---
+
+## home
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/home`](#get-api-v1-home) 🔒 | The entire Home screen in one request |
+
+### `GET` `/api/v1/home`
+
+**The entire Home screen in one request**
+
+🔒 Requires a bearer token.
+
+Budget: under 250 ms p95. One round trip, one payload, no client-side fan-out.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Home payload | [`Home`](#home) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `501` | Not implemented yet | null |
+
+---
+
+## track
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/track/history`](#get-api-v1-track-history) 🔒 | Footprint time series |
+| `POST` | [`/api/v1/track/logs`](#post-api-v1-track-logs) 🔒 | Submit the daily log — the core loop |
+| `PATCH` | [`/api/v1/track/logs/{id}`](#patch-api-v1-track-logs-id) 🔒 | Edit a log until 02:00 the next day |
+| `GET` | [`/api/v1/track/today`](#get-api-v1-track-today) 🔒 | Today's log if it exists, plus the question set and prefill defaults |
+
+### `GET` `/api/v1/track/history`
+
+**Footprint time series**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `from` | query | yes | string | e.g. `"2026-10-01"` |
+| `to` | query | yes | string | e.g. `"2026-10-31"` |
+| `granularity` | query | no | `day` \| `week` \| `month` | default `"day"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Series | object |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/track/logs`
+
+**Submit the daily log — the core loop**
+
+🔒 Requires a bearer token.
+
+One transaction: validate, compute 5 categories, upsert the footprint, update the streak, evaluate the active goal, award rewards. Idempotent on (user, clientLogId), so an offline queue can replay safely. The response carries everything the result sheet needs — no refetch required.
+
+**Request body** (required) — [`SubmitLogBody`](#submitlogbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `clientLogId` | string (uuid) | yes | e.g. `"0193f0a2-7c31-7b4e-9a51-6b2e0f3c4d55"` |
+| `logDate` | string | yes | The user's LOCAL date. Must be today or yesterday in their timezone.. e.g. `"2026-10-31"` |
+| `answers` | [`DailyAnswers`](#dailyanswers) | yes |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Footprint computed and rewards granted | [`LogResult`](#logresult) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `409` | Conflict | null |
+| `422` | Domain rule violation | null |
+| `429` | Rate limited — see Retry-After | null |
+| `501` | Not implemented yet | null |
+
+### `PATCH` `/api/v1/track/logs/{id}`
+
+**Edit a log until 02:00 the next day**
+
+🔒 Requires a bearer token.
+
+The reduction bonus is computed once, on first submit, and is NOT re-granted on edit.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `answers` | [`DailyAnswers`](#dailyanswers) | yes |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Recomputed | [`LogResult`](#logresult) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/track/today`
+
+**Today's log if it exists, plus the question set and prefill defaults**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Today's state | [`TrackToday`](#tracktoday) |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+---
+
+## goals
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/goals`](#get-api-v1-goals) 🔒 | Active goal and settled history |
+| `POST` | [`/api/v1/goals`](#post-api-v1-goals) 🔒 | Create a goal, freezing its target |
+| `DELETE` | [`/api/v1/goals/{id}`](#delete-api-v1-goals-id) 🔒 | Cancel a goal |
+| `PATCH` | [`/api/v1/goals/{id}`](#patch-api-v1-goals-id) 🔒 | Edit an active goal |
+| `GET` | [`/api/v1/goals/{id}/progress`](#get-api-v1-goals-id-progress) 🔒 | Actual vs frozen target, with a projection |
+
+### `GET` `/api/v1/goals`
+
+**Active goal and settled history**
+
+🔒 Requires a bearer token.
+
+Goals are never deleted — they settle to achieved or missed and stay visible.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Goals | [`GoalsList`](#goalslist) |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/goals`
+
+**Create a goal, freezing its target**
+
+🔒 Requires a bearer token.
+
+409 when an active goal already exists — one per user, enforced by the database.
+
+**Request body** (required) — [`CreateGoalBody`](#creategoalbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `type` | `reduce_percent` \| `absolute_cap` | yes | e.g. `"reduce_percent"` |
+| `period` | `week` \| `month` \| `quarter` | yes | e.g. `"month"` |
+| `reducePercent` | number | no | Required when type is reduce_percent. e.g. `15`. range 1…90 |
+| `capKgPerDay` | number | no | Required when type is absolute_cap. range 0.5…100 |
+| `startDate` | string | yes | e.g. `"2026-11-01"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `201` | Created | [`Goal`](#goal) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `409` | Conflict | null |
+| `422` | Domain rule violation | null |
+| `501` | Not implemented yet | null |
+
+### `DELETE` `/api/v1/goals/{id}`
+
+**Cancel a goal**
+
+🔒 Requires a bearer token.
+
+Sets status to 'cancelled'. The row is kept.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Cancelled | [`Goal`](#goal) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `PATCH` `/api/v1/goals/{id}`
+
+**Edit an active goal**
+
+🔒 Requires a bearer token.
+
+Recomputes and re-freezes the target.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `type` | `reduce_percent` \| `absolute_cap` | no | e.g. `"reduce_percent"` |
+| `period` | `week` \| `month` \| `quarter` | no | e.g. `"month"` |
+| `reducePercent` | number | no | Required when type is reduce_percent. e.g. `15`. range 1…90 |
+| `capKgPerDay` | number | no | Required when type is absolute_cap. range 0.5…100 |
+| `startDate` | string | no | e.g. `"2026-11-01"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Updated | [`Goal`](#goal) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `422` | Domain rule violation | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/goals/{id}/progress`
+
+**Actual vs frozen target, with a projection**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Progress | [`GoalProgress`](#goalprogress) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+---
+
+## leaderboard
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/leaderboard`](#get-api-v1-leaderboard) 🔒 | Points ranking |
+| `GET` | [`/api/v1/leaderboard/me`](#get-api-v1-leaderboard-me) 🔒 | Own rank, without paging to it |
+
+### `GET` `/api/v1/leaderboard`
+
+**Points ranking**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `period` | query | no | `all` \| `month` \| `week` | default `"all"` |
+| `scope` | query | no | `global` \| `city` | default `"global"` |
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Ranked page | object |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/leaderboard/me`
+
+**Own rank, without paging to it**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Own rank | [`MyRank`](#myrank) |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+---
+
+## marketplace
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/addresses`](#get-api-v1-addresses) 🔒 | Own delivery addresses |
+| `POST` | [`/api/v1/addresses`](#post-api-v1-addresses) 🔒 | Add an address |
+| `DELETE` | [`/api/v1/addresses/{id}`](#delete-api-v1-addresses-id) 🔒 | Delete an address |
+| `PATCH` | [`/api/v1/addresses/{id}`](#patch-api-v1-addresses-id) 🔒 | Edit an address |
+| `GET` | [`/api/v1/marketplace/cart`](#get-api-v1-marketplace-cart) 🔒 | Current cart, priced with zero coins applied |
+| `POST` | [`/api/v1/marketplace/cart/items`](#post-api-v1-marketplace-cart-items) 🔒 | Add an item to the cart |
+| `DELETE` | [`/api/v1/marketplace/cart/items/{id}`](#delete-api-v1-marketplace-cart-items-id) 🔒 | Remove a line |
+| `PATCH` | [`/api/v1/marketplace/cart/items/{id}`](#patch-api-v1-marketplace-cart-items-id) 🔒 | Change a line quantity (id is the product id) |
+| `POST` | [`/api/v1/marketplace/cart/preview`](#post-api-v1-marketplace-cart-preview) 🔒 | Server-priced quote for a coin offer |
+| `GET` | [`/api/v1/marketplace/orders`](#get-api-v1-marketplace-orders) 🔒 | Own orders |
+| `POST` | [`/api/v1/marketplace/orders`](#post-api-v1-marketplace-orders) 🔒 | Place an order |
+| `GET` | [`/api/v1/marketplace/orders/{id}`](#get-api-v1-marketplace-orders-id) 🔒 | Order detail |
+| `GET` | [`/api/v1/marketplace/products`](#get-api-v1-marketplace-products) 🔒 | Browse eco products |
+| `GET` | [`/api/v1/marketplace/products/{slug}`](#get-api-v1-marketplace-products-slug) 🔒 | Product detail |
+
+### `GET` `/api/v1/addresses`
+
+**Own delivery addresses**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Addresses | object |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/addresses`
+
+**Add an address**
+
+🔒 Requires a bearer token.
+
+**Request body** (required) — [`AddressBody`](#addressbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | yes | e.g. `"Adittya"` |
+| `phone` | string | yes | e.g. `"+919876543210"` |
+| `line1` | string | yes | e.g. `"12 Hill Road"` |
+| `line2` | string,null | yes |  |
+| `city` | string | yes | e.g. `"Mumbai"` |
+| `state` | string | yes | e.g. `"Maharashtra"` |
+| `pincode` | string | yes | e.g. `"400050"` |
+| `isDefault` | boolean | yes | e.g. `true` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `201` | Created | [`Address`](#address) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `DELETE` `/api/v1/addresses/{id}`
+
+**Delete an address**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Deleted | object |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `PATCH` `/api/v1/addresses/{id}`
+
+**Edit an address**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | no | e.g. `"Adittya"` |
+| `phone` | string | no | e.g. `"+919876543210"` |
+| `line1` | string | no | e.g. `"12 Hill Road"` |
+| `line2` | string,null | no |  |
+| `city` | string | no | e.g. `"Mumbai"` |
+| `state` | string | no | e.g. `"Maharashtra"` |
+| `pincode` | string | no | e.g. `"400050"` |
+| `isDefault` | boolean | no | e.g. `true` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Updated | [`Address`](#address) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/marketplace/cart`
+
+**Current cart, priced with zero coins applied**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Cart | [`CartQuote`](#cartquote) |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/marketplace/cart/items`
+
+**Add an item to the cart**
+
+🔒 Requires a bearer token.
+
+**Request body** (required) — [`AddCartItemBody`](#addcartitembody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `productId` | integer | yes | e.g. `12` |
+| `quantity` | integer | no | e.g. `1`. range 1…20. default `1` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Cart | [`CartQuote`](#cartquote) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `422` | Domain rule violation | null |
+| `501` | Not implemented yet | null |
+
+### `DELETE` `/api/v1/marketplace/cart/items/{id}`
+
+**Remove a line**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Cart | [`CartQuote`](#cartquote) |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `PATCH` `/api/v1/marketplace/cart/items/{id}`
+
+**Change a line quantity (id is the product id)**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `quantity` | integer | yes | range 0…20 |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Cart | [`CartQuote`](#cartquote) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/marketplace/cart/preview`
+
+**Server-priced quote for a coin offer**
+
+🔒 Requires a bearer token.
+
+Drives the coin slider. discount = min(offered/10 x 100, 20% of subtotal, wallet). The client never computes the price it pays.
+
+**Request body** (required) — [`CartPreviewBody`](#cartpreviewbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `offeredCoins` | integer | yes | e.g. `2000`. range 0…∞ |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Quote | [`CartQuote`](#cartquote) |
+| `401` | Not authenticated | null |
+| `422` | Domain rule violation | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/marketplace/orders`
+
+**Own orders**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | e.g. `20`. default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Orders | object |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/marketplace/orders`
+
+**Place an order**
+
+🔒 Requires a bearer token.
+
+One transaction: decrement stock, insert the order with price snapshots, debit coins through the ledger. Replaying the same idempotencyKey returns the original order rather than charging twice.
+
+**Request body** (required) — [`PlaceOrderBody`](#placeorderbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `offeredCoins` | integer | yes | e.g. `480`. range 0…∞ |
+| `addressId` | integer | yes | e.g. `2` |
+| `idempotencyKey` | string (uuid) | yes | e.g. `"0193f0b1-55aa-7c3d-8e21-9f0a1b2c3d4e"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `201` | Order placed | [`Order`](#order) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `409` | Conflict | null |
+| `422` | Domain rule violation | null |
+| `429` | Rate limited — see Retry-After | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/marketplace/orders/{id}`
+
+**Order detail**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Order | [`Order`](#order) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/marketplace/products`
+
+**Browse eco products**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `category` | query | no | `plants` \| `household` \| `personal_care` \| `kitchen` \| `stationery` | e.g. `"plants"` |
+| `q` | query | no | string |  |
+| `sort` | query | no | `newest` \| `price_asc` \| `price_desc` \| `co2_desc` | default `"newest"` |
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Products | object |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/marketplace/products/{slug}`
+
+**Product detail**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `slug` | path | yes | string | e.g. `"beach-cleanup-versova"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Product | [`Product`](#product) |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+---
+
+## events
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/events`](#get-api-v1-events) 🔒 | Discover events |
+| `POST` | [`/api/v1/events`](#post-api-v1-events) 🔒 | Create an event — the creator becomes its host |
+| `PATCH` | [`/api/v1/events/{id}`](#patch-api-v1-events-id) 🔒 | Edit an event (host only) |
+| `POST` | [`/api/v1/events/{id}/cancel`](#post-api-v1-events-id-cancel) 🔒 | Cancel an event (host only) |
+| `POST` | [`/api/v1/events/{id}/co-hosts`](#post-api-v1-events-id-co-hosts) 🔒 | Add a co-host (host only). Co-hosts may scan but not edit or cancel. |
+| `DELETE` | [`/api/v1/events/{id}/co-hosts/{userId}`](#delete-api-v1-events-id-co-hosts-userid) 🔒 | Remove a co-host (host only) |
+| `POST` | [`/api/v1/events/{id}/manual-check-in`](#post-api-v1-events-id-manual-check-in) 🔒 | Check in by participant id — the web fallback for a host without the app |
+| `GET` | [`/api/v1/events/{id}/participants`](#get-api-v1-events-id-participants) 🔒 | Participant list (host and co-hosts only) |
+| `GET` | [`/api/v1/events/{id}/pass`](#get-api-v1-events-id-pass) 🔒 | Own pass, including the code for the QR |
+| `DELETE` | [`/api/v1/events/{id}/register`](#delete-api-v1-events-id-register) 🔒 | Cancel own registration |
+| `POST` | [`/api/v1/events/{id}/register`](#post-api-v1-events-id-register) 🔒 | Register and receive a pass |
+| `POST` | [`/api/v1/events/{id}/scan`](#post-api-v1-events-id-scan) 🔒 | Check in a pass by its code (host and co-hosts only) |
+| `GET` | [`/api/v1/events/{slug}`](#get-api-v1-events-slug) 🔒 | Event detail with viewer-relative state |
+
+### `GET` `/api/v1/events`
+
+**Discover events**
+
+🔒 Requires a bearer token.
+
+The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `filter` | query | no | `upcoming` \| `nearby` \| `registered` \| `hosting` \| `past` | default `"upcoming"` |
+| `type` | query | no | `plant_drive` \| `cleanup_drive` \| `awareness` \| `recycling_drive` \| `workshop` \| `other` | e.g. `"cleanup_drive"` |
+| `lat` | query | no | number,null |  |
+| `lng` | query | no | number,null |  |
+| `radiusKm` | query | no | number | default `25` |
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Events | object |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/events`
+
+**Create an event — the creator becomes its host**
+
+🔒 Requires a bearer token.
+
+**Request body** (required) — [`CreateEventBody`](#createeventbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `title` | string | yes | e.g. `"Beach clean-up, Versova"` |
+| `description` | string | yes |  |
+| `type` | `plant_drive` \| `cleanup_drive` \| `awareness` \| `recycling_drive` \| `workshop` \| `other` | yes | e.g. `"cleanup_drive"` |
+| `visibility` | `public` \| `invite_only` | no | e.g. `"public"`. default `"public"` |
+| `coverUrl` | string,null | no |  |
+| `startAt` | string | yes | e.g. `"2026-11-02T01:30:00.000Z"` |
+| `endAt` | string | yes | e.g. `"2026-11-02T04:00:00.000Z"` |
+| `venueName` | string | yes |  |
+| `venueAddress` | string | no |  |
+| `latitude` | number | no | range -90…90 |
+| `longitude` | number | no | range -180…180 |
+| `capacity` | integer | no | range 1…10000. default `100` |
+| `publish` | boolean | no | False leaves it as a draft, invisible to others. default `false` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `201` | Created | [`Event`](#event) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `422` | Domain rule violation | null |
+| `501` | Not implemented yet | null |
+
+### `PATCH` `/api/v1/events/{id}`
+
+**Edit an event (host only)**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `title` | string | no | e.g. `"Beach clean-up, Versova"` |
+| `description` | string | no |  |
+| `type` | `plant_drive` \| `cleanup_drive` \| `awareness` \| `recycling_drive` \| `workshop` \| `other` | no | e.g. `"cleanup_drive"` |
+| `visibility` | `public` \| `invite_only` | no | e.g. `"public"`. default `"public"` |
+| `coverUrl` | string,null | no |  |
+| `startAt` | string | no | e.g. `"2026-11-02T01:30:00.000Z"` |
+| `endAt` | string | no | e.g. `"2026-11-02T04:00:00.000Z"` |
+| `venueName` | string | no |  |
+| `venueAddress` | string | no |  |
+| `latitude` | number | no | range -90…90 |
+| `longitude` | number | no | range -180…180 |
+| `capacity` | integer | no | range 1…10000. default `100` |
+| `publish` | boolean | no | False leaves it as a draft, invisible to others. default `false` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Updated | [`Event`](#event) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/events/{id}/cancel`
+
+**Cancel an event (host only)**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Cancelled | [`Event`](#event) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/events/{id}/co-hosts`
+
+**Add a co-host (host only). Co-hosts may scan but not edit or cancel.**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required) — [`CoHostBody`](#cohostbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `userId` | integer | yes | e.g. `9` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Added | [`Event`](#event) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `DELETE` `/api/v1/events/{id}/co-hosts/{userId}`
+
+**Remove a co-host (host only)**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer |  |
+| `userId` | path | yes | integer |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Removed | [`Event`](#event) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/events/{id}/manual-check-in`
+
+**Check in by participant id — the web fallback for a host without the app**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `passId` | integer | yes |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Checked in | [`ScanResult`](#scanresult) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `422` | Domain rule violation | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/events/{id}/participants`
+
+**Participant list (host and co-hosts only)**
+
+🔒 Requires a bearer token.
+
+A participant list is personal data. Non-hosts get 403 — it is never public.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Participants | [`EventParticipantList`](#eventparticipantlist) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/events/{id}/pass`
+
+**Own pass, including the code for the QR**
+
+🔒 Requires a bearer token.
+
+Only ever returns the caller's own pass. Cache it on device for offline display.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Pass | [`EventPass`](#eventpass) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `DELETE` `/api/v1/events/{id}/register`
+
+**Cancel own registration**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Cancelled | object |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/events/{id}/register`
+
+**Register and receive a pass**
+
+🔒 Requires a bearer token.
+
+Idempotent: registering twice returns the existing pass. Closes at start + 1h or when capacity is reached.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `201` | Registered | [`RegisterResult`](#registerresult) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `409` | Conflict | null |
+| `422` | Domain rule violation | null |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/events/{id}/scan`
+
+**Check in a pass by its code (host and co-hosts only)**
+
+🔒 Requires a bearer token.
+
+Seven ordered checks (PRD-v2 §6.6.4):
+1. caller is host or co-host  -> 403 EVENT_001
+2. pass exists for this event -> 404 EVENT_002
+3. now within [start-1h, end+2h] -> 422 EVENT_003
+4. not already checked in     -> 200 with alreadyCheckedIn: true, no second reward
+5. under capacity             -> 422 EVENT_005
+6. mark checked in + award the attendee, in one transaction
+7. flag for review when check-ins exceed 3x this host's median
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required) — [`ScanBody`](#scanbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `passCode` | string | yes | e.g. `"yJ8kQ2mXp..."` |
+| `scanClientId` | string (uuid) | yes | e.g. `"0193f0c4-11bb-7a2e-9d31-4e5f6a7b8c9d"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Checked in, or already checked in | [`ScanResult`](#scanresult) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `422` | Domain rule violation | null |
+| `429` | Rate limited — see Retry-After | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/events/{slug}`
+
+**Event detail with viewer-relative state**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `slug` | path | yes | string | e.g. `"beach-cleanup-versova"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Event | [`Event`](#event) |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+---
+
+## reference
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/cities`](#get-api-v1-cities)  | City autocomplete for onboarding |
+| `GET` | [`/api/v1/notifications`](#get-api-v1-notifications) 🔒 | In-app notifications |
+| `PATCH` | [`/api/v1/notifications/{id}/read`](#patch-api-v1-notifications-id-read) 🔒 | Mark one notification read |
+| `GET` | [`/api/v1/regions`](#get-api-v1-regions)  | Regions with their grid emission factor and tariff |
+| `POST` | [`/api/v1/uploads/presign`](#post-api-v1-uploads-presign) 🔒 | Presigned PUT for a direct-to-storage upload |
+
+### `GET` `/api/v1/cities`
+
+**City autocomplete for onboarding**
+
+🔓 No authentication.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `q` | query | yes | string | e.g. `"mum"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Matching cities | object |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/notifications`
+
+**In-app notifications**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | e.g. `20`. default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Notifications | object |
+| `401` | Not authenticated | null |
+| `501` | Not implemented yet | null |
+
+### `PATCH` `/api/v1/notifications/{id}/read`
+
+**Mark one notification read**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Marked read | [`Notification`](#notification) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+| `501` | Not implemented yet | null |
+
+### `GET` `/api/v1/regions`
+
+**Regions with their grid emission factor and tariff**
+
+🔓 No authentication.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Regions | object |
+| `501` | Not implemented yet | null |
+
+### `POST` `/api/v1/uploads/presign`
+
+**Presigned PUT for a direct-to-storage upload**
+
+🔒 Requires a bearer token.
+
+Images never transit the API. The server verifies magic bytes and strips EXIF asynchronously after upload.
+
+**Request body** (required) — [`PresignBody`](#presignbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `purpose` | `avatar` \| `event_cover` | yes | e.g. `"event_cover"` |
+| `contentType` | `image/jpeg` \| `image/png` \| `image/webp` | yes | e.g. `"image/jpeg"` |
+| `sizeBytes` | integer | yes | e.g. `840122`. range 1…5242880 |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Presigned | [`PresignResult`](#presignresult) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `429` | Rate limited — see Retry-After | null |
+| `501` | Not implemented yet | null |
+
+---
+
+## carbon
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/carbon/methodology`](#get-api-v1-carbon-methodology)  | Every emission factor, with its source — public |
+
+### `GET` `/api/v1/carbon/methodology`
+
+**Every emission factor, with its source — public**
+
+🔓 No authentication.
+
+Rendered at /methodology on web. No auth: it is the credibility surface.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Factor table | [`Methodology`](#methodology) |
+| `501` | Not implemented yet | null |
+
+---
+
+## Schemas
+
+79 named components.
+
+### ActiveGoalSummary
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `3` |
+| `label` | string | yes | e.g. `"Cut 15% this month"` |
+| `progressPct` | number | yes | e.g. `64` |
+| `daysLeft` | integer | yes | e.g. `11` |
+| `onTrack` | boolean | yes | e.g. `true` |
+
+### AddCartItemBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `productId` | integer | yes | e.g. `12` |
+| `quantity` | integer | no | e.g. `1`. range 1…20. default `1` |
+
+### Address
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `2` |
+| `name` | string | yes | e.g. `"Adittya"` |
+| `phone` | string | yes | e.g. `"+919876543210"` |
+| `line1` | string | yes | e.g. `"12 Hill Road"` |
+| `line2` | string,null | yes |  |
+| `city` | string | yes | e.g. `"Mumbai"` |
+| `state` | string | yes | e.g. `"Maharashtra"` |
+| `pincode` | string | yes | e.g. `"400050"` |
+| `isDefault` | boolean | yes | e.g. `true` |
+
+### AddressBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | yes | e.g. `"Adittya"` |
+| `phone` | string | yes | e.g. `"+919876543210"` |
+| `line1` | string | yes | e.g. `"12 Hill Road"` |
+| `line2` | string,null | yes |  |
+| `city` | string | yes | e.g. `"Mumbai"` |
+| `state` | string | yes | e.g. `"Maharashtra"` |
+| `pincode` | string | yes | e.g. `"400050"` |
+| `isDefault` | boolean | yes | e.g. `true` |
+
+### ApiError
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `code` | string | yes | e.g. `"AUTH_001"` |
+| `message` | string | yes | e.g. `"Invalid email or password."` |
+| `details` | object | yes |  |
+
+### AuthResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `session` | [`Session`](#session) | yes |  |
+| `user` | [`Me`](#me) | yes |  |
+
+### Baseline
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `transportKg` | number | yes | e.g. `2.74` |
+| `foodKg` | number | yes | e.g. `1.27` |
+| `homeEnergyKg` | number | yes | e.g. `1.83` |
+| `waterKg` | number | yes | e.g. `0.05` |
+| `wasteKg` | number | yes | e.g. `0.16` |
+| `totalKg` | number | yes | e.g. `6.05` |
+
+### Breakdown
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `transportKg` | number | yes | e.g. `2.74` |
+| `foodKg` | number | yes | e.g. `1.27` |
+| `homeEnergyKg` | number | yes | e.g. `1.83` |
+| `waterKg` | number | yes | e.g. `0.05` |
+| `wasteKg` | number | yes | e.g. `0.16` |
+| `totalKg` | number | yes | e.g. `6.05` |
+
+### CartItem
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `productId` | integer | yes | e.g. `12` |
+| `product` | [`Product`](#product) | yes |  |
+| `quantity` | integer | yes | e.g. `2`. range 1…∞ |
+| `lineTotalPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+
+### CartPreviewBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `offeredCoins` | integer | yes | e.g. `2000`. range 0…∞ |
+
+### CartQuote
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `items` | [`CartItem`](#cartitem)[] | yes |  |
+| `subtotalPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `maxDiscountPaise` | integer | yes | 20% of subtotal, floored. e.g. `24000` |
+| `discountPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `totalPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `coinsSpent` | integer | yes | e.g. `480` |
+| `coinsBalanceAfter` | integer | yes | e.g. `0` |
+| `coinsPerRupee` | integer | yes | e.g. `10` |
+| `capReached` | boolean | yes | True when the 20% cap bound the discount. e.g. `true` |
+
+### City
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `1` |
+| `name` | string | yes | e.g. `"Mumbai"` |
+| `regionCode` | string | yes | e.g. `"IN-MH"` |
+
+### CoHostBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `userId` | integer | yes | e.g. `9` |
+
+### CreateEventBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `title` | string | yes | e.g. `"Beach clean-up, Versova"` |
+| `description` | string | yes |  |
+| `type` | `plant_drive` \| `cleanup_drive` \| `awareness` \| `recycling_drive` \| `workshop` \| `other` | yes | e.g. `"cleanup_drive"` |
+| `visibility` | `public` \| `invite_only` | no | e.g. `"public"`. default `"public"` |
+| `coverUrl` | string,null | no |  |
+| `startAt` | string | yes | e.g. `"2026-11-02T01:30:00.000Z"` |
+| `endAt` | string | yes | e.g. `"2026-11-02T04:00:00.000Z"` |
+| `venueName` | string | yes |  |
+| `venueAddress` | string | no |  |
+| `latitude` | number | no | range -90…90 |
+| `longitude` | number | no | range -180…180 |
+| `capacity` | integer | no | range 1…10000. default `100` |
+| `publish` | boolean | no | False leaves it as a draft, invisible to others. default `false` |
+
+### CreateGoalBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `type` | `reduce_percent` \| `absolute_cap` | yes | e.g. `"reduce_percent"` |
+| `period` | `week` \| `month` \| `quarter` | yes | e.g. `"month"` |
+| `reducePercent` | number | no | Required when type is reduce_percent. e.g. `15`. range 1…90 |
+| `capKgPerDay` | number | no | Required when type is absolute_cap. range 0.5…100 |
+| `startDate` | string | yes | e.g. `"2026-11-01"` |
+
+### DailyAnswers
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `trips` | [`Trip`](#trip)[] | no |  |
+| `vegMeals` | integer | no | e.g. `2`. range 0…10 |
+| `nonVegMeals` | integer | no | e.g. `0`. range 0…10 |
+| `veganMeals` | integer | no | e.g. `1`. range 0…10 |
+| `acHoursBucket` | `0` \| `1_3` \| `4_8` \| `8_plus` | no | e.g. `"1_3"` |
+| `bathChoice` | `bucket` \| `short_shower` \| `long_shower` | no | e.g. `"bucket"` |
+| `wasteActions` | `segregated` \| `composted` \| `refused_plastic` \| `none_of_these`[] | no |  |
+
+### DataExport
+
+`object`
+
+### EmissionFactor
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `key` | string | yes | e.g. `"transport.car_petrol"` |
+| `value` | number | yes | e.g. `0.171` |
+| `unit` | string | yes | e.g. `"kg CO2e/km"` |
+| `basis` | string | yes | e.g. `"13.5 km/l x 2.31 kg CO2/l petrol"` |
+| `source` | string | yes | e.g. `"IPCC default + Indian fleet average"` |
+
+### Event
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `5` |
+| `slug` | string | yes | e.g. `"beach-cleanup-versova"` |
+| `title` | string | yes | e.g. `"Beach clean-up, Versova"` |
+| `description` | string | yes | e.g. `"Gloves and bags provided. Two hours, then chai."` |
+| `type` | `plant_drive` \| `cleanup_drive` \| `awareness` \| `recycling_drive` \| `workshop` \| `other` | yes | e.g. `"cleanup_drive"` |
+| `status` | `draft` \| `published` \| `ongoing` \| `completed` \| `cancelled` | yes | e.g. `"published"` |
+| `visibility` | `public` \| `invite_only` | yes | e.g. `"public"` |
+| `coverUrl` | string,null | yes |  |
+| `host` | [`UserSummary`](#usersummary) | yes |  |
+| `startAt` | string | yes | e.g. `"2026-11-02T01:30:00.000Z"` |
+| `endAt` | string | yes | e.g. `"2026-11-02T04:00:00.000Z"` |
+| `venueName` | string | yes | e.g. `"Versova Beach"` |
+| `venueAddress` | string,null | yes | e.g. `"Versova, Andheri West, Mumbai"` |
+| `latitude` | number,null | yes | e.g. `19.1351` |
+| `longitude` | number,null | yes | e.g. `72.8126` |
+| `capacity` | integer | yes | e.g. `100` |
+| `registeredCount` | integer | yes | e.g. `38` |
+| `checkedInCount` | integer | yes | e.g. `0` |
+| `distanceKm` | number,null | no | Only when the nearby filter was used. e.g. `2.4` |
+| `viewer` | [`EventViewerState`](#eventviewerstate) | yes |  |
+
+### EventParticipant
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `passId` | integer | yes | e.g. `77` |
+| `user` | [`UserSummary`](#usersummary) | yes |  |
+| `status` | `registered` \| `checked_in` \| `cancelled` \| `no_show` | yes | e.g. `"registered"` |
+| `registeredAt` | string | yes | e.g. `"2026-10-29T12:00:00.000Z"` |
+| `checkedInAt` | string,null | yes |  |
+
+### EventParticipantList
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `registeredCount` | integer | yes | e.g. `38` |
+| `checkedInCount` | integer | yes | e.g. `12` |
+| `capacity` | integer | yes | e.g. `100` |
+| `items` | [`EventParticipant`](#eventparticipant)[] | yes |  |
+
+### EventPass
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `77` |
+| `eventId` | integer | yes | e.g. `5` |
+| `eventTitle` | string | yes | e.g. `"Beach clean-up, Versova"` |
+| `eventStartAt` | string | yes | e.g. `"2026-11-02T01:30:00.000Z"` |
+| `venueName` | string | yes | e.g. `"Versova Beach"` |
+| `status` | `registered` \| `checked_in` \| `cancelled` \| `no_show` | yes | e.g. `"registered"` |
+| `passCode` | string | yes | Owner only. Encode this in the QR.. e.g. `"yJ8kQ2mXp..."` |
+| `qrPayload` | string | yes | e.g. `"ecolife://pass/yJ8kQ2mXp..."` |
+| `checkedInAt` | string,null | yes |  |
+
+### EventViewerState
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `isHost` | boolean | yes | e.g. `false` |
+| `isCoHost` | boolean | yes | e.g. `false` |
+| `registered` | boolean | yes | e.g. `true` |
+| `passStatus` | `registered` \| `checked_in` \| `cancelled` \| `no_show` \| null | yes |  |
+
+### Failure
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `status` | `false` | yes |  |
+| `data` | null | yes |  |
+| `error` | [`ApiError`](#apierror) | yes |  |
+
+### ForgotPasswordBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email` | string (email) | yes | e.g. `"yusuf@example.com"` |
+
+### Goal
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `3` |
+| `type` | `reduce_percent` \| `absolute_cap` | yes |  |
+| `period` | `week` \| `month` \| `quarter` | yes |  |
+| `reducePercent` | number,null | yes | e.g. `15` |
+| `capKgPerDay` | number,null | yes |  |
+| `startDate` | string | yes | e.g. `"2026-11-01"` |
+| `endDate` | string | yes | e.g. `"2026-11-30"` |
+| `baselineKgTotal` | number | yes | e.g. `246` |
+| `targetKgTotal` | number | yes | e.g. `209.1` |
+| `status` | `active` \| `achieved` \| `missed` \| `cancelled` | yes | e.g. `"active"` |
+| `actualKgTotal` | number,null | yes | e.g. `134.2` |
+| `settledAt` | string,null | yes |  |
+| `createdAt` | string | yes | e.g. `"2026-10-31T09:00:00.000Z"` |
+
+### GoalProgress
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `goal` | [`Goal`](#goal) | yes |  |
+| `actualKgTotal` | number | yes | e.g. `134.2` |
+| `targetKgTotal` | number | yes | e.g. `209.1` |
+| `progressPct` | number | yes | actual / target, as a percentage. e.g. `64.2` |
+| `daysElapsed` | integer | yes | e.g. `19` |
+| `daysLeft` | integer | yes | e.g. `11` |
+| `projectedKgTotal` | number | yes | Linear projection at the current daily rate. e.g. `211.9` |
+| `onTrack` | boolean | yes | e.g. `true` |
+
+### GoalsList
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `active` | [`Goal`](#goal) \| null | yes |  |
+| `past` | [`Goal`](#goal)[] | yes |  |
+
+### HistoryPoint
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `date` | string | yes | e.g. `"2026-10-31"` |
+| `totalKg` | number | yes | e.g. `6.05` |
+| `baselineTotalKg` | number | yes | e.g. `8.2` |
+| `logged` | boolean | yes | e.g. `true` |
+
+### Home
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `greetingName` | string | yes | e.g. `"Adittya"` |
+| `wallet` | [`Wallet`](#wallet) | yes |  |
+| `today` | [`HomeToday`](#hometoday) | yes |  |
+| `streak` | [`Streak`](#streak) | yes |  |
+| `week` | [`HomeWeek`](#homeweek) | yes |  |
+| `breakdown30d` | [`Breakdown`](#breakdown) | yes |  |
+| `activeGoal` | [`ActiveGoalSummary`](#activegoalsummary) \| null | yes |  |
+| `leaderboard` | [`LeaderboardPeek`](#leaderboardpeek) | yes |  |
+| `nextEvent` | [`NextEvent`](#nextevent) \| null | yes |  |
+
+### HomeToday
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `date` | string | yes | e.g. `"2026-10-31"` |
+| `logged` | boolean | yes | False drives the "Log today" CTA. e.g. `true` |
+| `breakdown` | [`Breakdown`](#breakdown) | yes |  |
+| `baselineTotalKg` | number | yes | e.g. `8.2` |
+| `deltaKg` | number | yes | Negative is an improvement. e.g. `-2.15` |
+| `percentOfBaseline` | number | yes | e.g. `73.8` |
+| `sources` | object | yes |  |
+| `inferredCount` | integer | yes | Categories that fell back to baseline. e.g. `2` |
+
+### HomeWeek
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `sparkline` | object[] | yes |  |
+| `avgKgPerDay` | number | yes | e.g. `7.18` |
+| `changeVsLastWeekPct` | number | yes | e.g. `-8.9` |
+
+### LeaderboardPeek
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `top` | unknown[] | yes | Top 3 |
+| `me` | object | yes |  |
+
+### LeaderboardRow
+
+`unknown`
+
+### Liveness
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `service` | string | yes | e.g. `"ecolife-server"` |
+| `status` | `up` | yes |  |
+
+### LoginBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email` | string (email) | yes | e.g. `"yusuf@example.com"` |
+| `password` | string | yes | e.g. `"correct horse battery"` |
+
+### LogResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `logId` | integer | yes | e.g. `812` |
+| `breakdown` | [`Breakdown`](#breakdown) | yes |  |
+| `baselineTotalKg` | number | yes | e.g. `8.2` |
+| `deltaKg` | number | yes | e.g. `-2.15` |
+| `reductionPct` | number | yes | e.g. `26.2` |
+| `sources` | object | yes |  |
+| `clamped` | boolean | yes | True when the day fell below MIN_PLAUSIBLE_KG. e.g. `false` |
+| `reward` | [`RewardGrant`](#rewardgrant) | yes |  |
+| `wallet` | [`Wallet`](#wallet) | yes |  |
+| `streak` | [`Streak`](#streak) | yes |  |
+
+### Me
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `7` |
+| `name` | string | yes | e.g. `"Yusuf"` |
+| `email` | string (email) | yes | e.g. `"yusuf@example.com"` |
+| `role` | `user` \| `admin` | yes | e.g. `"user"` |
+| `avatarUrl` | string,null | yes |  |
+| `city` | string,null | yes | e.g. `"Mumbai"` |
+| `timezone` | string | yes | e.g. `"Asia/Kolkata"` |
+| `emailVerified` | boolean | yes | False blocks every reward (PRD-v2 §4.4). e.g. `true` |
+| `onboardingComplete` | boolean | yes | e.g. `true` |
+| `completedSteps` | integer | yes | e.g. `5`. range 0…5 |
+| `wallet` | [`Wallet`](#wallet) | yes |  |
+| `unreadNotifications` | integer | yes | e.g. `2` |
+
+### Methodology
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `factorVersion` | integer | yes | e.g. `1` |
+| `updatedAt` | string | yes | e.g. `"2026-10-31T00:00:00.000Z"` |
+| `caveat` | string | yes | e.g. `"Published averages, not measurements. India-weighted where India-specific data exists."` |
+| `factors` | [`EmissionFactor`](#emissionfactor)[] | yes |  |
+
+### MyRank
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `rank` | integer,null | yes | e.g. `12` |
+| `pointsTotal` | integer | yes | e.g. `1240` |
+| `totalRanked` | integer | yes | e.g. `318` |
+| `percentile` | number | yes | e.g. `96.2` |
+
+### NextEvent
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `5` |
+| `slug` | string | yes | e.g. `"beach-cleanup-versova"` |
+| `title` | string | yes | e.g. `"Beach clean-up, Versova"` |
+| `startAt` | string | yes | e.g. `"2026-11-02T01:30:00.000Z"` |
+| `venueName` | string | yes | e.g. `"Versova Beach"` |
+| `passReady` | boolean | yes | e.g. `true` |
+
+### Notification
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `44` |
+| `type` | string | yes | e.g. `"event_reminder"` |
+| `title` | string | yes | e.g. `"Beach clean-up tomorrow, 7 AM"` |
+| `body` | string,null | yes | e.g. `"Your pass is ready."` |
+| `linkPath` | string,null | yes | e.g. `"/events/beach-cleanup-versova"` |
+| `readAt` | string,null | yes |  |
+| `createdAt` | string | yes | e.g. `"2026-10-31T08:00:00.000Z"` |
+
+### OkMessage
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `message` | string | yes | e.g. `"If that address exists, a link is on its way."` |
+
+### OnboardingAnswers
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `householdSize` | integer | no | e.g. `4`. range 1…15 |
+| `city` | string | no | e.g. `"Mumbai"` |
+| `regionCode` | string | no | e.g. `"IN-MH"` |
+| `coolingUsage` | `none` \| `fan_only` \| `ac_occasional` \| `ac_daily` | no | e.g. `"ac_occasional"` |
+| `dietType` | `vegan` \| `vegetarian` \| `eggetarian` \| `non_veg_weekly` \| `non_veg_daily` | no | e.g. `"vegetarian"` |
+| `foodWasteLevel` | `low` \| `medium` \| `high` | no | e.g. `"low"` |
+| `packagedFoodFreq` | `rarely` \| `sometimes` \| `often` | no | e.g. `"sometimes"` |
+| `primaryCommuteMode` | `walk` \| `cycle` \| `bus` \| `metro_train` \| `two_wheeler` \| `car` \| `cab` \| `auto_rickshaw` \| `work_from_home` | no | e.g. `"metro_train"` |
+| `vehicleFuel` | `petrol` \| `diesel` \| `cng` \| `electric` \| `not_applicable` | no | e.g. `"not_applicable"` |
+| `commuteDistanceKm` | number | no | One way. Doubled and weighted 5/7 for the baseline.. e.g. `14.5`. range 0…200 |
+| `flightsPerYear` | integer | no | e.g. `2`. range 0…50 |
+| `electricityKwhMonth` | number,null | no | e.g. `240`. range 0…2000 |
+| `electricityBillInr` | integer,null | no | range 0…∞ |
+| `kwhSource` | `reported` \| `from_bill` \| `estimated` | no | e.g. `"reported"` |
+| `cookingFuel` | `lpg` \| `png` \| `electric_induction` \| `firewood` | no | e.g. `"lpg"` |
+| `hasSolar` | boolean | no | e.g. `false` |
+| `waterUsageLevel` | `low` \| `medium` \| `high` | no | e.g. `"medium"` |
+| `wasteHabit` | `segregate_and_compost` \| `segregate_only` \| `none` | no | e.g. `"segregate_only"` |
+
+### OnboardingCompleteResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `baseline` | [`Baseline`](#baseline) | yes |  |
+| `wallet` | [`Wallet`](#wallet) | yes |  |
+| `pointsAwarded` | integer | yes | e.g. `100` |
+| `coinsAwarded` | integer | yes | e.g. `50` |
+
+### OnboardingState
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `completedSteps` | integer | yes | e.g. `3`. range 0…5 |
+| `complete` | boolean | yes | e.g. `false` |
+| `answers` | [`OnboardingAnswers`](#onboardinganswers) | yes |  |
+
+### OnboardingStep1
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `householdSize` | integer | yes | e.g. `4`. range 1…15 |
+| `city` | string | yes | e.g. `"Mumbai"` |
+| `regionCode` | string | yes | e.g. `"IN-MH"` |
+| `coolingUsage` | `none` \| `fan_only` \| `ac_occasional` \| `ac_daily` | yes | e.g. `"ac_occasional"` |
+
+### OnboardingStep2
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `dietType` | `vegan` \| `vegetarian` \| `eggetarian` \| `non_veg_weekly` \| `non_veg_daily` | yes | e.g. `"vegetarian"` |
+| `foodWasteLevel` | `low` \| `medium` \| `high` | yes | e.g. `"low"` |
+| `packagedFoodFreq` | `rarely` \| `sometimes` \| `often` | yes | e.g. `"sometimes"` |
+
+### OnboardingStep3
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `primaryCommuteMode` | `walk` \| `cycle` \| `bus` \| `metro_train` \| `two_wheeler` \| `car` \| `cab` \| `auto_rickshaw` \| `work_from_home` | yes | e.g. `"metro_train"` |
+| `vehicleFuel` | `petrol` \| `diesel` \| `cng` \| `electric` \| `not_applicable` | yes | e.g. `"not_applicable"` |
+| `commuteDistanceKm` | number | yes | One way. Doubled and weighted 5/7 for the baseline.. e.g. `14.5`. range 0…200 |
+| `flightsPerYear` | integer | yes | e.g. `2`. range 0…50 |
+
+### OnboardingStep4
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `electricityKwhMonth` | number,null | yes | e.g. `240`. range 0…2000 |
+| `electricityBillInr` | integer,null | no | range 0…∞ |
+| `kwhSource` | `reported` \| `from_bill` \| `estimated` | yes | e.g. `"reported"` |
+| `cookingFuel` | `lpg` \| `png` \| `electric_induction` \| `firewood` | yes | e.g. `"lpg"` |
+| `hasSolar` | boolean | yes | e.g. `false` |
+
+### OnboardingStep5
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `waterUsageLevel` | `low` \| `medium` \| `high` | yes | e.g. `"medium"` |
+| `wasteHabit` | `segregate_and_compost` \| `segregate_only` \| `none` | yes | e.g. `"segregate_only"` |
+
+### OnboardingStepBody
+
+`[`OnboardingStep1`](#onboardingstep1) \| [`OnboardingStep2`](#onboardingstep2) \| [`OnboardingStep3`](#onboardingstep3) \| [`OnboardingStep4`](#onboardingstep4) \| [`OnboardingStep5`](#onboardingstep5)`
+
+### Order
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `101` |
+| `orderNumber` | string | yes | e.g. `"ECO-2026-00042"` |
+| `items` | object[] | yes | Name and price are snapshots — a later rename never rewrites history |
+| `subtotalPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `discountPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `totalPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `coinsSpent` | integer | yes | e.g. `480` |
+| `status` | `placed` \| `confirmed` \| `shipped` \| `delivered` \| `cancelled` | yes | e.g. `"placed"` |
+| `address` | [`Address`](#address) \| null | yes |  |
+| `createdAt` | string | yes | e.g. `"2026-10-31T10:02:00.000Z"` |
+
+### OwnProfile
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `user` | [`UserSummary`](#usersummary) | yes |  |
+| `timezone` | string | yes | e.g. `"Asia/Kolkata"` |
+| `wallet` | [`Wallet`](#wallet) | yes |  |
+| `baseline` | [`Baseline`](#baseline) | yes |  |
+| `answers` | [`OnboardingAnswers`](#onboardinganswers) | yes |  |
+| `memberSince` | string | yes | e.g. `"2026-10-31T09:35:00.000Z"` |
+
+### PageInfo
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `nextCursor` | string,null | yes |  |
+| `hasMore` | boolean | yes | e.g. `false` |
+
+### PlaceOrderBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `offeredCoins` | integer | yes | e.g. `480`. range 0…∞ |
+| `addressId` | integer | yes | e.g. `2` |
+| `idempotencyKey` | string (uuid) | yes | e.g. `"0193f0b1-55aa-7c3d-8e21-9f0a1b2c3d4e"` |
+
+### PresignBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `purpose` | `avatar` \| `event_cover` | yes | e.g. `"event_cover"` |
+| `contentType` | `image/jpeg` \| `image/png` \| `image/webp` | yes | e.g. `"image/jpeg"` |
+| `sizeBytes` | integer | yes | e.g. `840122`. range 1…5242880 |
+
+### PresignResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `uploadUrl` | string | yes | e.g. `"https://storage.example.com/..."` |
+| `publicUrl` | string | yes | e.g. `"https://cdn.ecolife.app/covers/abc123.webp"` |
+| `expiresInSeconds` | integer | yes | e.g. `300` |
+
+### Product
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `12` |
+| `slug` | string | yes | e.g. `"tulsi-plant"` |
+| `name` | string | yes | e.g. `"Tulsi plant, terracotta pot"` |
+| `description` | string,null | yes | e.g. `"Grown without synthetic fertiliser."` |
+| `category` | `plants` \| `household` \| `personal_care` \| `kitchen` \| `stationery` | yes | e.g. `"plants"` |
+| `pricePaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `imageUrl` | string,null | yes |  |
+| `stock` | integer | yes | e.g. `34` |
+| `co2SavedKg` | number,null | yes | Why the product exists. Shown on the card.. e.g. `21.9` |
+
+### ProfilePatchBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | no |  |
+| `timezone` | string | no |  |
+| `avatarUrl` | string,null | no |  |
+| `answers` | [`OnboardingAnswers`](#onboardinganswers) | no |  |
+
+### PublicProfile
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `user` | [`UserSummary`](#usersummary) | yes |  |
+| `pointsTotal` | integer | yes | e.g. `1240` |
+| `globalRank` | integer,null | yes | e.g. `12` |
+| `currentStreak` | integer | yes | e.g. `12` |
+| `eventsAttended` | integer | yes | e.g. `3` |
+| `memberSince` | string | yes | e.g. `"2026-08-02T00:00:00.000Z"` |
+
+### Readiness
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `service` | string | yes | e.g. `"ecolife-server"` |
+| `database` | `reachable` | yes |  |
+| `latencyMs` | integer | yes | e.g. `42` |
+
+### RefreshBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `refreshToken` | string | no | Mobile sends this. Web sends the httpOnly cookie instead. |
+
+### Region
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `code` | string | yes | e.g. `"IN-MH"` |
+| `name` | string | yes | e.g. `"Maharashtra"` |
+| `gridKgPerKwh` | number | yes | e.g. `0.71` |
+| `tariffPaisePerKwh` | integer | yes | e.g. `950` |
+
+### RegisterBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | yes | e.g. `"Yusuf"` |
+| `email` | string (email) | yes | e.g. `"yusuf@example.com"` |
+| `password` | string | yes | e.g. `"correct horse battery"` |
+| `phone` | string | no | e.g. `"+919876543210"` |
+| `timezone` | string | no | e.g. `"Asia/Kolkata"`. default `"Asia/Kolkata"` |
+
+### RegisterResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `pass` | [`EventPass`](#eventpass) | yes |  |
+| `event` | [`Event`](#event) | yes |  |
+
+### ResetPasswordBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `token` | string | yes |  |
+| `password` | string | yes | e.g. `"correct horse battery"` |
+
+### RewardEntry
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `9001` |
+| `pointsDelta` | integer | yes | e.g. `200` |
+| `coinsDelta` | integer | yes | e.g. `100` |
+| `source` | `onboarding` \| `daily_log` \| `streak` \| `reduction` \| `goal` \| `event_attend` \| `event_host` \| `order` \| `order_refund` \| `admin` | yes | e.g. `"event_attend"` |
+| `note` | string,null | yes | e.g. `"Beach clean-up, Versova"` |
+| `createdAt` | string | yes | e.g. `"2026-10-30T07:12:00.000Z"` |
+
+### RewardGrant
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `pointsDelta` | integer | yes | e.g. `19` |
+| `coinsDelta` | integer | yes | e.g. `9` |
+| `reasons` | object[] | yes |  |
+
+### ScanBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `passCode` | string | yes | e.g. `"yJ8kQ2mXp..."` |
+| `scanClientId` | string (uuid) | yes | e.g. `"0193f0c4-11bb-7a2e-9d31-4e5f6a7b8c9d"` |
+
+### ScanResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `alreadyCheckedIn` | boolean | yes | e.g. `false` |
+| `attendee` | [`UserSummary`](#usersummary) | yes |  |
+| `checkedInAt` | string | yes | e.g. `"2026-11-02T02:12:00.000Z"` |
+| `checkedInCount` | integer | yes | e.g. `13` |
+| `capacity` | integer | yes | e.g. `100` |
+| `attendeeReward` | [`RewardGrant`](#rewardgrant) \| null | yes | Null when already checked in — the reward was granted on the first scan |
+
+### Session
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `accessToken` | string | yes | e.g. `"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."` |
+| `accessTokenExpiresIn` | integer | yes | seconds. e.g. `900` |
+| `refreshToken` | string,null | yes | Mobile only. Null for web, where it is an httpOnly cookie. |
+
+### Streak
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `current` | integer | yes | e.g. `12` |
+| `longest` | integer | yes | e.g. `23` |
+
+### SubmitLogBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `clientLogId` | string (uuid) | yes | e.g. `"0193f0a2-7c31-7b4e-9a51-6b2e0f3c4d55"` |
+| `logDate` | string | yes | The user's LOCAL date. Must be today or yesterday in their timezone.. e.g. `"2026-10-31"` |
+| `answers` | [`DailyAnswers`](#dailyanswers) | yes |  |
+
+### TrackToday
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `date` | string | yes | e.g. `"2026-10-31"` |
+| `existingLog` | object,null | yes |  |
+| `askCooling` | boolean | yes | False when the profile reports no cooling. e.g. `true` |
+| `defaults` | unknown | yes |  |
+
+### Trip
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `mode` | `walk` \| `cycle` \| `bus` \| `metro_train` \| `two_wheeler` \| `car` \| `cab` \| `auto_rickshaw` \| `work_from_home` | yes | e.g. `"bus"` |
+| `km` | number | yes | e.g. `14.5`. range 0…500 |
+
+### UserSummary
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `7` |
+| `name` | string | yes | e.g. `"Yusuf"` |
+| `avatarUrl` | string,null | yes |  |
+| `city` | string,null | yes | e.g. `"Mumbai"` |
+
+### VerifyEmailBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `token` | string | yes | e.g. `"a1b2c3…"` |
+
+### Wallet
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `pointsTotal` | integer | yes | e.g. `1240` |
+| `coinsBalance` | integer | yes | e.g. `420` |
+
