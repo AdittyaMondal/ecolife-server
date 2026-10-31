@@ -122,6 +122,21 @@ export async function listEvents(opts: {
         opts.type ? eq(events.type, opts.type as EventRow['type']) : undefined,
         // Drafts are visible only to the people running them.
         sql`(${events.status} <> 'draft' or ${events.hostId} = ${opts.viewerId})`,
+        /**
+         * An invite_only event is UNLISTED: it never appears in discovery
+         * for anyone who is not running it or already holding a pass.
+         *
+         * That is the whole of what can honestly be enforced today —
+         * there is no invitations table, so "who was invited" is not a
+         * question the schema can answer. Anyone who learns the slug can
+         * still open and join one. See the note on `register`.
+         */
+        sql`(
+          ${events.visibility} <> 'invite_only'
+          or ${events.hostId} = ${opts.viewerId}
+          or ${events.id} in ${hostingIds}
+          or ${events.id} in ${registeredIds}
+        )`,
         opts.afterId !== null ? lt(events.id, opts.afterId) : undefined,
       ),
     )
@@ -329,12 +344,29 @@ export function listParticipants(eventId: number) {
     .orderBy(asc(eventPasses.id));
 }
 
-/** Distinct attendees actually checked in, for the host reward threshold. */
-export async function checkedInCount(tx: Executor, eventId: number) {
+/**
+ * Distinct checked-in attendees who do NOT run the event.
+ *
+ * The host reward is for drawing a crowd, so the people running the event
+ * cannot be the crowd — a host plus four co-hosts would otherwise reach the
+ * five-attendee threshold with nobody else present.
+ */
+export async function checkedInAttendeeCount(tx: Executor, eventId: number) {
   const [row] = await tx
     .select({ n: sql<number>`count(distinct ${eventPasses.userId})::int` })
     .from(eventPasses)
-    .where(and(eq(eventPasses.eventId, eventId), eq(eventPasses.status, 'checked_in')));
+    .innerJoin(events, eq(events.id, eventPasses.eventId))
+    .where(
+      and(
+        eq(eventPasses.eventId, eventId),
+        eq(eventPasses.status, 'checked_in'),
+        sql`${eventPasses.userId} <> ${events.hostId}`,
+        sql`not exists (
+          select 1 from ${eventHosts} h
+           where h.event_id = ${eventId} and h.user_id = ${eventPasses.userId}
+        )`,
+      ),
+    );
   return row?.n ?? 0;
 }
 
