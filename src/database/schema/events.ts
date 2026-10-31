@@ -17,10 +17,21 @@ import { users } from './users.ts';
 /**
  * Community events — plant drives, clean-ups (PRD-v2 §6.6, §7.5).
  *
- * `registeredCount` and `checkedInCount` are trigger-maintained counters, not
- * computed on read: the scanner polls the count on every scan and a COUNT(*)
- * per scan is wasteful. v1 had a `total_points` column maintained only by a
- * seeder, so it was permanently stale — these are maintained by the database.
+ * `registeredCount` and `checkedInCount` are denormalised counters, not
+ * computed on read: the scanner shows a running count on every scan and a
+ * COUNT(*) per scan is wasteful.
+ *
+ * They are maintained by the SERVICE, inside the same transaction as the
+ * event_passes write — there is no trigger. Registration must therefore be a
+ * conditional update:
+ *
+ *   UPDATE events SET registered_count = registered_count + 1
+ *   WHERE id = $1 AND registered_count < capacity RETURNING *
+ *
+ * and the pass insert only proceeds if that returned a row. The two CHECKs
+ * below are the backstop: if a service ever forgets, the write fails rather
+ * than overfilling the event. (v1 had a `total_points` column updated only by
+ * a seeder, so it was permanently stale — hence the constraints here.)
  */
 export const events = pgTable(
   'events',
@@ -53,7 +64,9 @@ export const events = pgTable(
   (t) => [
     check('events_end_after_start', sql`${t.endAt} > ${t.startAt}`),
     check('events_capacity_positive', sql`${t.capacity} > 0`),
+    check('events_registrations_within_capacity', sql`${t.registeredCount} <= ${t.capacity}`),
     check('events_checkins_within_capacity', sql`${t.checkedInCount} <= ${t.capacity}`),
+    check('events_checkins_within_registrations', sql`${t.checkedInCount} <= ${t.registeredCount}`),
     index('events_upcoming_idx').on(t.status, t.startAt),
     index('events_geo_idx').on(t.latitude, t.longitude),
   ],

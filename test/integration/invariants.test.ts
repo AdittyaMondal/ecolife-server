@@ -3,6 +3,7 @@ import { db, pool } from '@database/client.ts';
 import {
   dailyFootprints,
   dailyLogs,
+  events,
   goals,
   orders,
   products,
@@ -285,6 +286,84 @@ describe('wallet cannot go negative', () => {
         err = e;
       }
       expect(constraintOf(err)).toBe('users_coins_non_negative');
+    },
+    TIMEOUT,
+  );
+});
+
+describe('email identity', () => {
+  it(
+    'treats a case-variant email as the same account, not a second one',
+    async () => {
+      const addr = `Case-${crypto.randomUUID()}@Example.Test`;
+      await db
+        .insert(users)
+        .values({ name: 'Mixed Case', email: addr, passwordHash: 'x' })
+        .execute();
+
+      let err: unknown;
+      try {
+        await db
+          .insert(users)
+          .values({ name: 'Lower Case', email: addr.toLowerCase(), passwordHash: 'x' })
+          .execute();
+      } catch (e) {
+        err = e;
+      }
+      // A plain unique(email) would have allowed this, giving one person two
+      // accounts and a login lookup that misses the row that exists.
+      expect(constraintOf(err)).toBe('users_email_lower_unq');
+
+      await db.delete(users).where(sql`lower(${users.email}) = ${addr.toLowerCase()}`).execute();
+    },
+    TIMEOUT,
+  );
+});
+
+describe('event capacity', () => {
+  it(
+    'refuses to register past capacity, and refuses more check-ins than registrations',
+    async () => {
+      const [e] = await db
+        .insert(events)
+        .values({
+          slug: `probe-${crypto.randomUUID()}`,
+          title: 'Capacity probe',
+          description: 'Exists only to prove the constraints fire.',
+          type: 'cleanup_drive',
+          hostId: userId,
+          startAt: new Date('2026-12-01T01:30:00Z'),
+          endAt: new Date('2026-12-01T04:00:00Z'),
+          venueName: 'Nowhere',
+          capacity: 2,
+          registeredCount: 2,
+        })
+        .returning();
+      const eventId = e!.id;
+
+      let overCapacity: unknown;
+      try {
+        await db
+          .update(events)
+          .set({ registeredCount: sql`${events.registeredCount} + 1` })
+          .where(eq(events.id, eventId))
+          .execute();
+      } catch (err) {
+        overCapacity = err;
+      }
+      expect(constraintOf(overCapacity)).toBe('events_registrations_within_capacity');
+
+      let phantom: unknown;
+      try {
+        // More people checked in than ever registered — the shape a colluding
+        // host's phantom attendees would take.
+        await db.update(events).set({ checkedInCount: 5 }).where(eq(events.id, eventId)).execute();
+      } catch (err) {
+        phantom = err;
+      }
+      expect(constraintOf(phantom)).toBe('events_checkins_within_capacity');
+
+      await db.delete(events).where(eq(events.id, eventId)).execute();
     },
     TIMEOUT,
   );

@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { bigserial, check, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  bigserial,
+  check,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { userRole } from './enums.ts';
 
 /**
@@ -19,7 +28,7 @@ export const users = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     name: text('name').notNull(),
-    email: text('email').notNull().unique(),
+    email: text('email').notNull(),
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     phone: text('phone'),
     passwordHash: text('password_hash').notNull(),
@@ -39,6 +48,19 @@ export const users = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
+    /**
+     * Uniqueness on lower(email), not on email.
+     *
+     * A plain unique column treats Alice@example.com and alice@example.com as
+     * two accounts, which is both an identity-confusion bug (a login lookup
+     * misses the row that exists) and the cheapest route to the multi-accounting
+     * PRD-v2 §4.4 lists as a leaderboard-farming vector. Every lookup must use
+     * lower(email) to hit this index.
+     *
+     * Not partial on deleted_at: account deletion anonymises PII (§6.8), which
+     * frees the address without needing a conditional index.
+     */
+    uniqueIndex('users_email_lower_unq').on(sql`lower(${t.email})`),
     check('users_points_non_negative', sql`${t.pointsTotal} >= 0`),
     check('users_coins_non_negative', sql`${t.coinsBalance} >= 0`),
     // Leaderboard reads these on every Home render.
