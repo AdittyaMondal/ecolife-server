@@ -107,6 +107,12 @@ rather than when the caller's access token happens to expire.
 | `ORG_002` | 403 | The organization is not `approved`. `details.status` carries `pending`, `rejected` or `suspended`. |
 | `ORG_003` | 403 | Wrong organization type for this action. |
 | `ORG_004` | 403 | Organization owner only. |
+| `ORG_005` | 409 | Already belongs to an organization. Enforced by `one_org_per_user`; relaxing the rule is `DROP INDEX`. |
+| `ORG_006` | 409 | An organization with that name already exists (`orgs_name_lower_unq`). |
+| `ORG_007` | 404 | No such organization. |
+| `ORG_008` | 404 | No account with that email, or that person is not a member. Both answer the same so the endpoint cannot be used to test whether an address is registered. |
+| `ORG_009` | 422 | An organization must keep at least one owner. Removing the last one leaves it unadministrable. |
+| `ORG_010` | 422 | A rejection or suspension requires a note. |
 
 ## Uploads
 

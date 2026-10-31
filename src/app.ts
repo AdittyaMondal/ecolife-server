@@ -9,6 +9,10 @@ import { healthRoutes } from '@modules/health/health.routes.ts';
 import { homeRoutes } from '@modules/home/home.routes.ts';
 import { leaderboardRoutes } from '@modules/leaderboard/leaderboard.routes.ts';
 import { addressRoutes, marketplaceRoutes } from '@modules/marketplace/marketplace.routes.ts';
+import {
+  adminOrganizationRoutes,
+  organizationRoutes,
+} from '@modules/organizations/organizations.routes.ts';
 import { profileRoutes, publicUserRoutes } from '@modules/profile/profile.routes.ts';
 import {
   carbonRoutes,
@@ -54,6 +58,8 @@ app.route('/api/v1/leaderboard', leaderboardRoutes);
 app.route('/api/v1/marketplace', marketplaceRoutes);
 app.route('/api/v1/addresses', addressRoutes);
 app.route('/api/v1/events', eventRoutes);
+app.route('/api/v1/organizations', organizationRoutes);
+app.route('/api/v1/admin/organizations', adminOrganizationRoutes);
 app.route('/api/v1/notifications', notificationRoutes);
 app.route('/api/v1/uploads', uploadRoutes);
 app.route('/api/v1/carbon', carbonRoutes);
@@ -102,6 +108,10 @@ app.doc31('/openapi.json', {
     { name: 'leaderboard', description: 'Points ranking' },
     { name: 'marketplace', description: 'Products, cart, coin-discounted orders' },
     { name: 'events', description: 'Events, QR passes, host check-in' },
+    {
+      name: 'organizations',
+      description: 'Partner organizations: registration, membership, admin review',
+    },
     { name: 'carbon', description: 'Public methodology and factor table' },
     { name: 'reference', description: 'Cities and regions' },
   ],

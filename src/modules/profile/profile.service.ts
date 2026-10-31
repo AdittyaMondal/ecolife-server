@@ -107,7 +107,11 @@ export async function onboardingState(userId: number) {
  */
 export async function saveStep(userId: number, step: number, body: unknown) {
   const profile = await repo.ensureProfile(userId);
-  if (profile.baselineTotalKg !== null && profile.completedSteps >= 5 && answeredSteps(profile) === 5) {
+  if (
+    profile.baselineTotalKg !== null &&
+    profile.completedSteps >= 5 &&
+    answeredSteps(profile) === 5
+  ) {
     // Editing after completion goes through PATCH /profile, which recomputes
     // the baseline forward. The wizard route would skip that.
     throw new DomainError(
