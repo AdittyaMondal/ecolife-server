@@ -29,6 +29,19 @@ const envSchema = z.object({
 
   /** Web origin, for CORS. The mobile client is not browser-origin-bound. */
   APP_ORIGIN: z.string().min(1),
+
+  /**
+   * Shared secret proving a request came from our own Next server.
+   *
+   * Only a caller presenting this may assert the end user's IP via
+   * `x-ecolife-client-ip`. Without it the server uses the socket address and
+   * IGNORES any `x-forwarded-for`, because that header is attacker-controlled
+   * and per-IP rate limits are what stand between /auth/login and a brute
+   * force. Required once the rate limiter lands (SRV-06).
+   */
+  INTERNAL_PROXY_TOKEN: z.string().min(32).optional(),
+  /** Number of proxy hops we actually operate, counted from the right of XFF. */
+  TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   /** Deep-link scheme used by event passes: ecolife://pass/{code} */
   MOBILE_SCHEME: z.string().min(1).default('ecolife'),
 
