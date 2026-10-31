@@ -88,6 +88,21 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   API_DOCS_TOKEN: z.string().min(16).optional(),
+
+  /**
+   * Skip the verification email and mark new accounts verified outright.
+   *
+   * Off unless explicitly switched on, and refused in production whatever
+   * it is set to. It used to be inferred from `NODE_ENV !== 'production'`,
+   * which fails OPEN: 'development', 'test', a typo and an unset value all
+   * satisfy it — and this very project ran a deployed server with
+   * NODE_ENV=development, where any signed-in account could verify itself
+   * with one request and walk straight past the earning gate.
+   */
+  DEV_AUTO_VERIFY: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   /** Deep-link scheme used by event passes: ecolife://pass/{code} */
   MOBILE_SCHEME: z.string().min(1).default('ecolife'),
 

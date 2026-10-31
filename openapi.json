@@ -3350,7 +3350,8 @@
               "null"
             ],
             "maxLength": 512,
-            "format": "uri"
+            "format": "uri",
+            "example": "https://cdn.ecolife.app/avatars/abc123.webp"
           }
         }
       },
@@ -3418,6 +3419,20 @@
         },
         "required": [
           "email"
+        ]
+      },
+      "LeaveOrganizationResult": {
+        "type": "object",
+        "properties": {
+          "left": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "left"
         ]
       },
       "ReviewOrganizationBody": {
@@ -8936,8 +8951,8 @@
         "tags": [
           "organizations"
         ],
-        "summary": "Remove a member (owner only)",
-        "description": "The last owner cannot be removed — that would orphan the organization.",
+        "summary": "Remove another member (owner only)",
+        "description": "To remove yourself, use DELETE /organizations/me/membership — the answer differs, because someone who has just left cannot read the roster they are no longer on. The last owner cannot be removed either way.",
         "security": [
           {
             "bearerAuth": []
@@ -9017,6 +9032,81 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Domain rule violation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/me/membership": {
+      "delete": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Leave your organization",
+        "description": "Anyone may leave, except the last owner. Members are ADDED by an owner rather than invited, so this is how someone who did not ask to be enrolled gets out — and since a person may belong to only one organization, being enrolled also blocks them from creating their own until they do.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Left",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LeaveOrganizationResult"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
             "content": {
               "application/json": {
                 "schema": {

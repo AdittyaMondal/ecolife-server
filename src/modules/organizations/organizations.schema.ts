@@ -1,5 +1,5 @@
 import { nullable } from '@common/openapi/envelope.ts';
-import { userSummarySchema } from '@common/openapi/shared-schemas.ts';
+import { externalImageUrlSchema, userSummarySchema } from '@common/openapi/shared-schemas.ts';
 import { z } from '@hono/zod-openapi';
 
 /**
@@ -12,6 +12,17 @@ import { z } from '@hono/zod-openapi';
  * Anyone can claim to be a corporate partner at signup; nobody gets a portal
  * that can list products or host official drives until a human says so.
  */
+
+/**
+ * `z.string().url()` accepts `javascript:` and `data:text/html,...`. An
+ * organization's website is rendered as a link in a partner directory, so
+ * an unrestricted scheme is a stored XSS vector aimed at everyone browsing
+ * it. Same reasoning as `externalImageUrlSchema`.
+ */
+const httpsUrl = z
+  .string()
+  .url()
+  .refine((u) => u.startsWith('https://'), { message: 'must be an https URL' });
 
 export const organizationTypeSchema = z
   .enum(['industry', 'ngo', 'seller'])
@@ -50,7 +61,7 @@ export const createOrganizationBodySchema = z
     name: z.string().min(2).max(120).openapi({ example: 'Acme Industries' }),
     type: organizationTypeSchema,
     description: z.string().max(2000).optional(),
-    websiteUrl: z.string().url().max(300).optional(),
+    websiteUrl: httpsUrl.max(300).optional(),
     contactEmail: z.string().email().max(160).optional(),
     contactPhone: z.string().max(32).optional(),
     city: z.string().max(80).optional(),
@@ -62,7 +73,7 @@ export const createOrganizationBodySchema = z
 export const updateOrganizationBodySchema = createOrganizationBodySchema
   .omit({ type: true })
   .partial()
-  .extend({ logoUrl: z.string().url().max(512).nullable().optional() })
+  .extend({ logoUrl: externalImageUrlSchema.nullable().optional() })
   .openapi('UpdateOrganizationBody');
 
 export const organizationMemberSchema = z
@@ -89,6 +100,10 @@ export const addMemberBodySchema = z
     role: orgMemberRoleSchema.default('member'),
   })
   .openapi('AddOrganizationMemberBody');
+
+export const leaveResultSchema = z
+  .object({ left: z.literal(true) })
+  .openapi('LeaveOrganizationResult');
 
 /**
  * The admin decision.

@@ -38,6 +38,14 @@ const body = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+async function approve(adminToken: string, orgId: number) {
+  await call(`/admin/organizations/${orgId}/review`, {
+    method: 'POST',
+    headers: auth(adminToken),
+    body: JSON.stringify({ decision: 'approve', note: 'test' }),
+  });
+}
+
 async function register(token: string, overrides: Record<string, unknown> = {}) {
   return json(
     await call('/organizations', {
@@ -136,7 +144,9 @@ describe('ownership boundaries', () => {
       const owner = await createOnboardedUser();
       const member = await createOnboardedUser();
       const stranger = await createOnboardedUser();
+      const admin = await createOnboardedUser({ role: 'admin' });
       const org = (await register(owner.token)).data;
+      await approve(admin.token, org.id);
 
       await call(`/organizations/${org.id}/members`, {
         method: 'POST',
@@ -203,10 +213,9 @@ describe('ownership boundaries', () => {
         method: 'DELETE',
         headers: auth(owner.token),
       });
-      // Removing the last owner leaves an organization nobody can administer
-      // and nobody can leave — unrecoverable without a DBA.
+      // Self-removal has its own endpoint, because the answer differs.
       expect(res.status).toBe(422);
-      expect((await json(res)).error.code).toBe('ORG_009');
+      expect((await json(res)).error.code).toBe('ORG_011');
     },
     TIMEOUT,
   );
@@ -216,7 +225,9 @@ describe('ownership boundaries', () => {
     async () => {
       const first = await createOnboardedUser();
       const second = await createOnboardedUser();
+      const admin = await createOnboardedUser({ role: 'admin' });
       const org = (await register(first.token)).data;
+      await approve(admin.token, org.id);
       await register(second.token);
 
       const res = await call(`/organizations/${org.id}/members`, {
@@ -226,6 +237,150 @@ describe('ownership boundaries', () => {
       });
       expect(res.status).toBe(409);
       expect((await json(res)).error.code).toBe('ORG_005');
+    },
+    TIMEOUT,
+  );
+});
+
+describe('consent and identity', () => {
+  it(
+    'refuses to add members until a human has approved the organization',
+    async () => {
+      const owner = await createOnboardedUser();
+      const invitee = await createOnboardedUser();
+      const org = (await register(owner.token)).data;
+
+      // While pending, this endpoint would otherwise tell any would-be
+      // owner whether an arbitrary email has an account.
+      const early = await call(`/organizations/${org.id}/members`, {
+        method: 'POST',
+        headers: auth(owner.token),
+        body: JSON.stringify({ email: invitee.email, role: 'member' }),
+      });
+      expect(early.status).toBe(403);
+      expect((await json(early)).error.code).toBe('ORG_002');
+
+      const admin = await createOnboardedUser({ role: 'admin' });
+      await approve(admin.token, org.id);
+      const after = await call(`/organizations/${org.id}/members`, {
+        method: 'POST',
+        headers: auth(owner.token),
+        body: JSON.stringify({ email: invitee.email, role: 'member' }),
+      });
+      expect(after.status).toBe(200);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'lets someone added without being asked leave again',
+    async () => {
+      const owner = await createOnboardedUser();
+      const admin = await createOnboardedUser({ role: 'admin' });
+      const conscript = await createOnboardedUser();
+      const org = (await register(owner.token)).data;
+      await approve(admin.token, org.id);
+      await call(`/organizations/${org.id}/members`, {
+        method: 'POST',
+        headers: auth(owner.token),
+        body: JSON.stringify({ email: conscript.email, role: 'member' }),
+      });
+
+      // Enrolled without consent, and one_org_per_user means that also
+      // blocks them from making their own. A membership nobody agreed to
+      // and nobody can leave is a trap.
+      const blocked = await call('/organizations', {
+        method: 'POST',
+        headers: auth(conscript.token),
+        body: JSON.stringify(body()),
+      });
+      expect(blocked.status).toBe(409);
+
+      const left = await json(
+        await call('/organizations/me/membership', {
+          method: 'DELETE',
+          headers: auth(conscript.token),
+        }),
+      );
+      expect(left.data.left).toBe(true);
+
+      // Free again, and able to create their own.
+      const mine = await json(await call('/organizations/me', { headers: auth(conscript.token) }));
+      expect(mine.data.organization).toBeNull();
+      expect(
+        (
+          await call('/organizations', {
+            method: 'POST',
+            headers: auth(conscript.token),
+            body: JSON.stringify(body()),
+          })
+        ).status,
+      ).toBe(201);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'will not let the last owner leave',
+    async () => {
+      const owner = await createOnboardedUser();
+      await register(owner.token);
+      const res = await call('/organizations/me/membership', {
+        method: 'DELETE',
+        headers: auth(owner.token),
+      });
+      expect(res.status).toBe(422);
+      expect((await json(res)).error.code).toBe('ORG_009');
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'sends an approved organization back for review when it changes identity',
+    async () => {
+      const owner = await createOnboardedUser();
+      const admin = await createOnboardedUser({ role: 'admin' });
+      const org = (await register(owner.token)).data;
+      await approve(admin.token, org.id);
+
+      // A phone number is not an identity.
+      const contact = await json(
+        await call(`/organizations/${org.id}`, {
+          method: 'PATCH',
+          headers: auth(owner.token),
+          body: JSON.stringify({ contactPhone: '+912055555555' }),
+        }),
+      );
+      expect(contact.data.status).toBe('approved');
+
+      // A name is. An approval attaches to WHO you appear to be, and
+      // "Acme Ltd" renaming itself to something official-looking must not
+      // carry the badge across.
+      const renamed = await json(
+        await call(`/organizations/${org.id}`, {
+          method: 'PATCH',
+          headers: auth(owner.token),
+          body: JSON.stringify({ name: `Ministry ${crypto.randomUUID().slice(0, 8)}` }),
+        }),
+      );
+      expect(renamed.data.status).toBe('pending');
+      expect(renamed.data.reviewedAt).toBeNull();
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'rejects a javascript: website URL',
+    async () => {
+      const owner = await createOnboardedUser();
+      const res = await call('/organizations', {
+        method: 'POST',
+        headers: auth(owner.token),
+        // Rendered as a link in a partner directory, so an unrestricted
+        // scheme is stored XSS aimed at everyone browsing it.
+        body: JSON.stringify(body({ websiteUrl: 'javascript:alert(1)' })),
+      });
+      expect(res.status).toBe(400);
     },
     TIMEOUT,
   );

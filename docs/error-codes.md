@@ -113,6 +113,7 @@ rather than when the caller's access token happens to expire.
 | `ORG_008` | 404 | No account with that email, or that person is not a member. Both answer the same so the endpoint cannot be used to test whether an address is registered. |
 | `ORG_009` | 422 | An organization must keep at least one owner. Removing the last one leaves it unadministrable. |
 | `ORG_010` | 422 | A rejection or suspension requires a note. |
+| `ORG_011` | 422 | Use `DELETE /organizations/me/membership` to remove yourself. |
 
 ## Uploads
 

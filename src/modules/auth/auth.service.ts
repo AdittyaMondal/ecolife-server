@@ -224,8 +224,11 @@ export async function resendVerification(userId: number) {
   const user = await repo.findUserById(userId);
   if (!user) throw new DomainError('AUTH_001', 'Account not found.', 401);
   if (user.emailVerifiedAt) throw new DomainError('AUTH_008', 'Already verified.', 409);
-  if (env.NODE_ENV !== 'production') {
+  // Fail CLOSED. Both conditions, so neither a stray env var nor a
+  // mis-set NODE_ENV alone can turn self-verification on.
+  if (env.NODE_ENV !== 'production' && env.DEV_AUTO_VERIFY) {
     await repo.markEmailVerified(user.id);
+    await grantWithheldOnboardingReward(user.id);
     return 'dev-auto-verified';
   }
   return issueEmailToken(user.id, 'verify');
