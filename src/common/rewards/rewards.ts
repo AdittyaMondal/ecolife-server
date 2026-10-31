@@ -186,7 +186,6 @@ export async function award(tx: Executor, input: AwardInput): Promise<AwardResul
  * than merely not grant it.
  */
 export async function canEarn(tx: Executor, userId: number): Promise<boolean> {
-  if (env.NODE_ENV !== 'production') return true;
   const [row] = await tx
     .select({ verifiedAt: users.emailVerifiedAt })
     .from(users)

@@ -95,7 +95,7 @@ export async function register(
     throw new DomainError('AUTH_005', 'That email is already registered.', 409);
   }
 
-  const isDev = env.NODE_ENV !== 'production';
+  const isDev = env.NODE_ENV === 'development';
   const created = await repo.createUser({
     name: input.name,
     email: input.email,
