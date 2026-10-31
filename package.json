@@ -24,7 +24,8 @@
     "gen:openapi:check": "bun run scripts/gen-openapi.ts --check",
     "mock": "bunx @stoplight/prism-cli@5.16.0 mock openapi.json -p 4010",
     "gen:apidocs": "bun run scripts/gen-api-docs.ts",
-    "gen:apidocs:check": "bun run scripts/gen-api-docs.ts --check"
+    "gen:apidocs:check": "bun run scripts/gen-api-docs.ts --check",
+    "grant-role": "bun scripts/grant-role.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1160.0",

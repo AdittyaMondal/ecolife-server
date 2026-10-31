@@ -104,6 +104,7 @@ outside those domains.
 | `pnpm gen:openapi` | Regenerate `openapi.json` from the route definitions |
 | `pnpm gen:openapi:check` | Fail if `openapi.json` is stale (CI) |
 | `pnpm mock` | Prism mock of `openapi.json` on :4010 — what the clients build against |
+| `pnpm grant-role` | Grants the roles that have no HTTP route yet — `admin`, and organization membership. See §2. |
 
 `npm run <script>` also works; dependencies are installed with **pnpm**.
 
