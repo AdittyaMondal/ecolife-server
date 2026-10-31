@@ -1,0 +1,7 @@
+[install]
+exact = false
+
+[test]
+coverage = false
+# Closes the shared pg pool once, after every test file. See the file's comment.
+preload = ["./src/common/testing/setup.ts"]

@@ -1,0 +1,14 @@
+# --- Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Dependencies / build output ---
+node_modules/
+dist/
+
+# --- Neon CLI link file (if the CLI is run from this repo) ---
+.neon
+
+# --- macOS ---
+.DS_Store
