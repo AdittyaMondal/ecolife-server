@@ -82,6 +82,36 @@ app.doc31('/openapi.json', {
   ],
 });
 
+/**
+ * Browsable API reference at /docs, rendered from the same document `/openapi.json`
+ * serves — so it can never describe an endpoint that does not exist.
+ *
+ * Hand-written rather than pulling in @hono/swagger-ui, which emits essentially
+ * this. The renderer loads from a CDN: acceptable for a developer tool, and the
+ * reason this is NOT part of the application's own CSP surface.
+ */
+app.get('/docs', (c) =>
+  c.html(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EcoLife API reference</title>
+    <style>
+      body { margin: 0; background: #0a1410; }
+    </style>
+  </head>
+  <body>
+    <script
+      id="api-reference"
+      data-url="/openapi.json"
+      data-configuration='{"theme":"alternate","hideDownloadButton":false,"defaultHttpClient":{"targetKey":"shell","clientKey":"curl"}}'
+    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.25.123/dist/browser/standalone.min.js"></script>
+  </body>
+</html>`),
+);
+
 app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
   type: 'http',
   scheme: 'bearer',
