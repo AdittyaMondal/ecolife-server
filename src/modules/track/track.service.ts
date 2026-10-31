@@ -215,6 +215,19 @@ function assertLoggableDate(user: UserRow, logDate: string) {
       today: todayLocal,
     });
   }
+
+  // A second bound, in UTC, that the user cannot move.
+  //
+  // `timezone` is self-declared, and real zones span UTC-12 to UTC+14 — 26
+  // hours. Flipping it between submits therefore reaches one calendar date
+  // beyond what the local window alone allows, which is a free extra day of
+  // reduction bonus for anyone who notices. No real zone can put a user more
+  // than one day either side of the UTC date, so this costs nobody honest
+  // anything.
+  const utcOffset = Math.abs(daysBetween(logDate, new Date().toISOString().slice(0, 10)));
+  if (utcOffset > 1) {
+    throw new DomainError('TRACK_002', 'You can only log today or yesterday.', 422, { logDate });
+  }
 }
 
 export type SubmitBody = { clientLogId: string; logDate: string; answers: TrackAnswers };

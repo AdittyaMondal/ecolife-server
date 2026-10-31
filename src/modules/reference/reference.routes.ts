@@ -1,8 +1,10 @@
 import { requireUser } from '@common/guards/auth.guard.ts';
 import { ok } from '@common/interceptors/response-envelope.ts';
-import { errorResponses, jsonOk, notImplemented, secured } from '@common/openapi/envelope.ts';
+import { BUCKETS, rateLimitByIp } from '@common/middleware/rate-limit.ts';
+import { errorResponses, jsonError, jsonOk, secured } from '@common/openapi/envelope.ts';
 import { createModule } from '@common/openapi/factory.ts';
 import { cursorQuery, idParam, paginated } from '@common/openapi/params.ts';
+import { presignUpload } from '@common/storage/storage.ts';
 import { createRoute, z } from '@hono/zod-openapi';
 import {
   citySchema,
@@ -82,15 +84,17 @@ uploadRoutes.openapi(
     request: {
       body: { content: { 'application/json': { schema: presignBodySchema } }, required: true },
     },
+    middleware: [requireUser, rateLimitByIp(BUCKETS.write)] as const,
     responses: {
       200: jsonOk(presignResultSchema, 'Presigned'),
       400: errorResponses[400],
       401: errorResponses[401],
       429: errorResponses[429],
-      501: errorResponses[501],
+      503: jsonError('Uploads are not configured on this server'),
     },
   }),
-  notImplemented,
+  async (c) =>
+    ok(c, await presignUpload({ userId: c.get('user').id, ...c.req.valid('json') }), 200),
 );
 
 export const notificationRoutes = createModule();

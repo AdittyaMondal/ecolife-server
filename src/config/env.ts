@@ -91,10 +91,17 @@ const envSchema = z.object({
   MAX_DISCOUNT_PCT: z.coerce.number().int().min(1).max(100).default(20),
 
   // --- Not yet wired; required once their module lands ---
-  S3_ENDPOINT: z.string().optional(),
+  /**
+   * Neon Object Storage. The AWS_* names are what `neon deploy` writes and
+   * what the S3 SDKs read from the environment by themselves — they are
+   * declared here so a misconfigured server fails loudly at the upload route
+   * rather than producing a broken presigned URL.
+   */
   S3_BUCKET: z.string().optional(),
-  S3_ACCESS_KEY_ID: z.string().optional(),
-  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  AWS_ENDPOINT_URL_S3: z.string().url().optional(),
+  AWS_REGION: z.string().optional(),
   SMTP_URL: z.string().optional(),
   MAIL_FROM: z.string().default('EcoLife <no-reply@ecolife.app>'),
   EXPO_ACCESS_TOKEN: z.string().optional(),

@@ -297,6 +297,20 @@ Hard-won; do not rediscover them.
   module singleton shared across every test file in a `bun test` process. A per-file
   `afterAll` closes it while a sibling file is still querying. Teardown lives in
   `src/common/testing/setup.ts`, preloaded via `bunfig.toml`.
+- **`neon init` / `neon deploy` rewrite `.env` with NEON's naming, not ours.** They
+  write `DATABASE_URL` = **pooled** and `DATABASE_URL_UNPOOLED` = direct, which is the exact
+  inverse of §4.2. Left alone, migrations then run through PgBouncer. After any `neon` command
+  that says "Pulled N Neon variables into .env", put it back:
+  `DATABASE_URL` = direct (no `-pooler`), `DATABASE_URL_POOLED` = pooled, and delete
+  `DATABASE_URL_UNPOOLED`. Back `.env` up first. They also downgrade `sslmode=verify-full`
+  to `sslmode=require` — there is a test that catches this, and §6's note on `verify-full`
+  says why it matters. `sed -i '' 's/sslmode=require/sslmode=verify-full/g' .env`.
+- **`files-sdk` needs the AWS SDK hoisted.** It declares `@aws-sdk/*` as *peer* dependencies,
+  and pnpm's isolated layout does not link a peer into the dependent's own folder, so
+  `import '@aws-sdk/client-s3'` fails from inside `files-sdk` even though it is installed.
+  `publicHoistPattern` in `pnpm-workspace.yaml` fixes it. Separately, Bun resolves a script
+  outside the project from its OWN global cache — run storage scripts from the repo root or
+  the import fails for a different reason that looks identical.
 - **Postgres is 18.6**, though the PRD says 16. Neon's current default. Everything the PRD
   needs — native enums, partial unique indexes, window functions, triggers — is present.
 - **`pnpm` is 12.5.1**, not the `10.x` in PRD §9.2. Pinned to what is installed; pinning 10.x

@@ -98,6 +98,13 @@ rather than when the caller's access token happens to expire.
 | `ORG_003` | 403 | Wrong organization type for this action. |
 | `ORG_004` | 403 | Organization owner only. |
 
+## Uploads
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `UPLOAD_001` | 400 | Unsupported `purpose` or `contentType`. |
+| `UPLOAD_002` | 503 | Object storage is not configured on this server (`S3_BUCKET` / `AWS_ENDPOINT_URL_S3` unset). Every other endpoint still works. |
+
 ## Reference and notifications
 
 | Code | HTTP | Meaning |
