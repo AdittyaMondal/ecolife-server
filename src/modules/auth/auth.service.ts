@@ -95,12 +95,14 @@ export async function register(
     throw new DomainError('AUTH_005', 'That email is already registered.', 409);
   }
 
+  const isDev = env.NODE_ENV !== 'production';
   const created = await repo.createUser({
     name: input.name,
     email: input.email,
     passwordHash: await hashPassword(input.password),
     phone: input.phone,
     timezone: input.timezone,
+    emailVerifiedAt: isDev ? new Date() : undefined,
   });
   if (!created) throw new DomainError('INTERNAL_001', 'Could not create the account.', 500);
 
@@ -222,6 +224,10 @@ export async function resendVerification(userId: number) {
   const user = await repo.findUserById(userId);
   if (!user) throw new DomainError('AUTH_001', 'Account not found.', 401);
   if (user.emailVerifiedAt) throw new DomainError('AUTH_008', 'Already verified.', 409);
+  if (env.NODE_ENV !== 'production') {
+    await repo.markEmailVerified(user.id);
+    return 'dev-auto-verified';
+  }
   return issueEmailToken(user.id, 'verify');
 }
 
