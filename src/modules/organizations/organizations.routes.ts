@@ -7,6 +7,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import {
   addMemberBodySchema,
   createOrganizationBodySchema,
+  leaveResultSchema,
   myOrganizationSchema,
   organizationMemberListSchema,
   organizationQuerySchema,
@@ -155,8 +156,11 @@ organizationRoutes.openapi(
     method: 'delete',
     path: '/{id}/members/{userId}',
     tags: ['organizations'],
-    summary: 'Remove a member (owner only)',
-    description: 'The last owner cannot be removed — that would orphan the organization.',
+    summary: 'Remove another member (owner only)',
+    description:
+      'To remove yourself, use DELETE /organizations/me/membership — the answer differs, ' +
+      'because someone who has just left cannot read the roster they are no longer on. ' +
+      'The last owner cannot be removed either way.',
     middleware: [requireUser] as const,
     security: secured,
     request: {
@@ -185,6 +189,29 @@ organizationRoutes.openapi(
     const { id, userId } = c.req.valid('param');
     return ok(c, await service.removeMember(c.get('user').id, id, userId), 200);
   },
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/me/membership',
+    tags: ['organizations'],
+    summary: 'Leave your organization',
+    description:
+      'Anyone may leave, except the last owner. Members are ADDED by an owner rather than ' +
+      'invited, so this is how someone who did not ask to be enrolled gets out — and since ' +
+      'a person may belong to only one organization, being enrolled also blocks them from ' +
+      'creating their own until they do.',
+    middleware: [requireUser] as const,
+    security: secured,
+    responses: {
+      200: jsonOk(leaveResultSchema, 'Left'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+      422: errorResponses[422],
+    },
+  }),
+  async (c) => ok(c, await service.leave(c.get('user').id), 200),
 );
 
 /** Mounted at /admin/organizations. Every route here is staff-only. */

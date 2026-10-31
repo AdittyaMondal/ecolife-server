@@ -44,7 +44,7 @@ Markers used in PRD-v2:
 
 ## 2. Current state — read this before assuming something exists
 
-> **Every endpoint is implemented.** All 73 operations across 62 paths run against the
+> **Every endpoint is implemented.** All 74 operations across 63 paths run against the
 > real database. No route returns `GEN_501`, and `notImplemented()` has no call sites left.
 
 What exists:
@@ -65,7 +65,7 @@ What exists:
 - **All eleven modules**: health, auth, profile, track, goals, leaderboard, home,
   marketplace, events, reference, organizations
 - A seed (`pnpm seed`) producing 25 users, 1,440 footprints, 24 products, 6 events
-- **198 tests**, including the money path, the QR check-in flow and the anti-farming rules
+- **203 tests**, including the money path, the QR check-in flow and the anti-farming rules
 
 **What does not exist:** `src/jobs/` and `src/ws/` are still empty — no scheduler, no
 WebSocket. `POST /uploads/presign` needs `S3_BUCKET` and the `AWS_*` variables or it
@@ -76,7 +76,9 @@ Known gaps, written down rather than discovered later:
 - `invite_only` events are UNLISTED, not access-controlled. There is no invitations
   table, so anyone who learns a slug can still join one.
 - An organization member is ADDED by an owner, not invited: the person is enrolled
-  without being asked. An invitation/accept flow needs a table that does not exist.
+  without being asked. `DELETE /organizations/me/membership` is the escape hatch, and
+  adding is gated on the organization being approved, but a real invite/accept flow
+  needs a table that does not exist.
 - `requireOrgRole` is now used by the organizations module itself, but no marketplace
   or events route is gated on organization type yet — the Seller Portal is deferred.
 - A goal that settles while the user is unverified is never paid, even after they

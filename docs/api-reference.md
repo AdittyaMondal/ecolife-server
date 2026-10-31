@@ -4,7 +4,7 @@
 > Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
 > fails CI when this file is stale.
 
-**Version** 0.1.0 · **Base path** `/api/v1` · **62 paths** · **73 operations** · **90 schemas**
+**Version** 0.1.0 · **Base path** `/api/v1` · **63 paths** · **74 operations** · **91 schemas**
 
 ---
 
@@ -69,7 +69,7 @@ an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` acce
 - [leaderboard](#leaderboard) — 2 operations
 - [marketplace](#marketplace) — 14 operations
 - [events](#events) — 13 operations
-- [organizations](#organizations) — 8 operations
+- [organizations](#organizations) — 9 operations
 - [reference](#reference) — 5 operations
 - [carbon](#carbon) — 1 operation
 - [Schemas](#schemas)
@@ -1474,8 +1474,9 @@ Seven ordered checks (PRD-v2 §6.6.4):
 | `PATCH` | [`/api/v1/organizations/{id}`](#patch-api-v1-organizations-id) 🔒 | Edit an organization (owner only) |
 | `GET` | [`/api/v1/organizations/{id}/members`](#get-api-v1-organizations-id-members) 🔒 | Roster — any member may read it |
 | `POST` | [`/api/v1/organizations/{id}/members`](#post-api-v1-organizations-id-members) 🔒 | Add a member by email (owner only) |
-| `DELETE` | [`/api/v1/organizations/{id}/members/{userId}`](#delete-api-v1-organizations-id-members-userid) 🔒 | Remove a member (owner only) |
+| `DELETE` | [`/api/v1/organizations/{id}/members/{userId}`](#delete-api-v1-organizations-id-members-userid) 🔒 | Remove another member (owner only) |
 | `GET` | [`/api/v1/organizations/me`](#get-api-v1-organizations-me) 🔒 | The caller's own organization, if any |
+| `DELETE` | [`/api/v1/organizations/me/membership`](#delete-api-v1-organizations-me-membership) 🔒 | Leave your organization |
 
 ### `GET` `/api/v1/admin/organizations`
 
@@ -1590,7 +1591,7 @@ Creates it as `pending` and makes the caller its owner. It stays unusable until 
 | `contactPhone` | string | no |  |
 | `city` | string | no |  |
 | `regionCode` | string | no |  |
-| `logoUrl` | string,null (uri) | no |  |
+| `logoUrl` | string,null (uri) | no | e.g. `"https://cdn.ecolife.app/avatars/abc123.webp"` |
 
 **Responses**
 
@@ -1658,11 +1659,11 @@ The person must already have an account. One organization per user.
 
 ### `DELETE` `/api/v1/organizations/{id}/members/{userId}`
 
-**Remove a member (owner only)**
+**Remove another member (owner only)**
 
 🔒 Requires a bearer token.
 
-The last owner cannot be removed — that would orphan the organization.
+To remove yourself, use DELETE /organizations/me/membership — the answer differs, because someone who has just left cannot read the roster they are no longer on. The last owner cannot be removed either way.
 
 **Parameters**
 
@@ -1693,6 +1694,23 @@ The last owner cannot be removed — that would orphan the organization.
 |---|---|---|
 | `200` | Own organization, or nulls | [`MyOrganization`](#myorganization) |
 | `401` | Not authenticated | null |
+
+### `DELETE` `/api/v1/organizations/me/membership`
+
+**Leave your organization**
+
+🔒 Requires a bearer token.
+
+Anyone may leave, except the last owner. Members are ADDED by an owner rather than invited, so this is how someone who did not ask to be enrolled gets out — and since a person may belong to only one organization, being enrolled also blocks them from creating their own until they do.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Left | [`LeaveOrganizationResult`](#leaveorganizationresult) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `422` | Domain rule violation | null |
 
 ---
 
@@ -1830,7 +1848,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 
 ## Schemas
 
-90 named components.
+91 named components.
 
 ### ActiveGoalSummary
 
@@ -2203,6 +2221,12 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 ### LeaderboardRow
 
 `unknown`
+
+### LeaveOrganizationResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `left` | `true` | yes |  |
 
 ### Liveness
 
@@ -2690,7 +2714,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `contactPhone` | string | no |  |
 | `city` | string | no |  |
 | `regionCode` | string | no |  |
-| `logoUrl` | string,null (uri) | no |  |
+| `logoUrl` | string,null (uri) | no | e.g. `"https://cdn.ecolife.app/avatars/abc123.webp"` |
 
 ### UserSummary
 

@@ -136,7 +136,7 @@ async function assertOwner(userId: number, organizationId: number) {
 export type UpdateBody = Partial<Omit<CreateBody, 'type'>> & { logoUrl?: string | null };
 
 export async function update(userId: number, organizationId: number, body: UpdateBody) {
-  await assertOwner(userId, organizationId);
+  const existing = await assertOwner(userId, organizationId);
 
   const patch: Record<string, unknown> = {};
   for (const key of [
@@ -151,6 +151,25 @@ export async function update(userId: number, organizationId: number, body: Updat
   ] as const) {
     if (body[key] !== undefined) patch[key] = body[key];
   }
+  /**
+   * Changing WHO YOU APPEAR TO BE re-opens the review.
+   *
+   * An approval attaches to an identity. "Acme Ltd" passing review and then
+   * renaming itself to something official-looking, with a matching logo and
+   * website, keeps the badge while becoming a different organization
+   * entirely. Name, logo and website are the fields that impersonate; a
+   * phone number or a description are not, so those do not disturb an
+   * approval.
+   */
+  const identityChanged = (['name', 'logoUrl', 'websiteUrl'] as const).some(
+    (k) => patch[k] !== undefined && patch[k] !== existing[k],
+  );
+  if (identityChanged && existing.status === 'approved') {
+    patch.status = 'pending';
+    patch.reviewedAt = null;
+    patch.reviewNote = null;
+  }
+
   // Deliberately NOT patchable: `type` and `status`. A seller must not
   // re-badge itself as an NGO after approval, and nobody approves themselves.
   if (Object.keys(patch).length > 0) {
@@ -193,7 +212,22 @@ export async function addMember(
   organizationId: number,
   body: { email: string; role: 'owner' | 'member' },
 ) {
-  await assertOwner(userId, organizationId);
+  const org = await assertOwner(userId, organizationId);
+
+  /**
+   * Only an APPROVED organization may add members.
+   *
+   * This endpoint tells its caller whether an email address has an account,
+   * which is an enumeration oracle. Gating it on approval means an attacker
+   * must first get a human to approve an organization before they can probe
+   * anything — a real barrier, and one that costs a legitimate owner only
+   * the wait they are already in.
+   */
+  if (org.status !== 'approved') {
+    throw new DomainError('ORG_002', `Your organization is ${org.status}.`, 403, {
+      status: org.status,
+    });
+  }
 
   const invitee = await repo.findUserByEmail(body.email);
   // Same 404 whether the address has no account or the lookup failed: this
@@ -218,18 +252,45 @@ export async function addMember(
 
 export async function removeMember(userId: number, organizationId: number, memberId: number) {
   await assertOwner(userId, organizationId);
-
-  const role = await repo.findMemberRole(organizationId, memberId);
-  if (role === null) throw new DomainError('ORG_008', 'That person is not a member.', 404);
-
-  // Removing the last owner would leave an organization nobody can administer
-  // and nobody can leave — unrecoverable without a DBA.
-  if (role === 'owner' && (await repo.ownerCount(organizationId)) <= 1) {
-    throw new DomainError('ORG_009', 'An organization must keep at least one owner.', 422);
+  // Self-removal has its own endpoint, because its answer is different: a
+  // person who just left cannot read the roster they are no longer on.
+  if (memberId === userId) {
+    throw new DomainError('ORG_011', 'Use DELETE /organizations/me/membership to leave.', 422);
   }
-
-  await repo.removeMember(organizationId, memberId);
+  await detach(organizationId, memberId);
   return members(userId, organizationId);
+}
+
+/**
+ * Self-service exit.
+ *
+ * Without this, someone added by an owner without being asked has no way
+ * out — and because `one_org_per_user` is unique, being enrolled also
+ * permanently blocks them from creating their own. A membership nobody
+ * consented to and nobody can leave is a trap, not a feature.
+ */
+export async function leave(userId: number) {
+  const membership = await repo.findMembership(userId);
+  if (!membership) throw new DomainError('ORG_001', 'You do not belong to an organization.', 403);
+  await detach(membership.id, userId);
+  return { left: true as const };
+}
+
+/** The shared removal, with the last-owner invariant held under a lock. */
+async function detach(organizationId: number, memberId: number) {
+  await db.transaction(async (tx) => {
+    const role = await repo.findMemberRole(organizationId, memberId, tx);
+    if (role === null) throw new DomainError('ORG_008', 'That person is not a member.', 404);
+
+    // Counted under a row lock, inside the same transaction as the delete.
+    // Two owners leaving at the same moment would otherwise both see two
+    // owners, both pass, and leave the organization with none — nobody can
+    // administer it and nobody can be added.
+    if (role === 'owner' && (await repo.lockOwnerCount(tx, organizationId)) <= 1) {
+      throw new DomainError('ORG_009', 'An organization must keep at least one owner.', 422);
+    }
+    await repo.removeMemberIn(tx, organizationId, memberId);
+  });
 }
 
 // --- admin -----------------------------------------------------------------

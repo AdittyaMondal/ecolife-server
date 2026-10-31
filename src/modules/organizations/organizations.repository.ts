@@ -147,18 +147,37 @@ export async function removeMember(organizationId: number, userId: number) {
   return row ?? null;
 }
 
-/** Owners left, so the last one cannot remove themselves and orphan the org. */
-export async function ownerCount(organizationId: number, tx: Executor = db) {
+/**
+ * Owners left, counted under a row lock.
+ *
+ * `FOR UPDATE` matters: two owners deleting each other at the same moment
+ * would both read a count of 2, both pass the "more than one owner" check
+ * and both commit, leaving an organization with no owner at all — nobody
+ * can administer it and nobody can leave. The lock serialises them so the
+ * second sees 1 and is refused.
+ */
+export async function lockOwnerCount(tx: Executor, organizationId: number) {
+  const rows = await tx.execute(sql`
+    select count(*)::int as n from (
+      select 1 from ${organizationMembers}
+       where organization_id = ${organizationId} and role = 'owner'
+       for update
+    ) locked
+  `);
+  return Number(rows.rows[0]?.n ?? 0);
+}
+
+export async function removeMemberIn(tx: Executor, organizationId: number, userId: number) {
   const [row] = await tx
-    .select({ n: sql<number>`count(*)::int` })
-    .from(organizationMembers)
+    .delete(organizationMembers)
     .where(
       and(
         eq(organizationMembers.organizationId, organizationId),
-        eq(organizationMembers.role, 'owner'),
+        eq(organizationMembers.userId, userId),
       ),
-    );
-  return row?.n ?? 0;
+    )
+    .returning({ id: organizationMembers.id });
+  return row ?? null;
 }
 
 export async function findUserByEmail(email: string) {
