@@ -42,7 +42,7 @@ marketplaceRoutes.openapi(
     tags: ['marketplace'],
     summary: 'Product detail',
     security: secured,
-    request: { params: slugParam },
+    request: { params: slugParam('tulsi-sapling') },
     responses: {
       200: jsonOk(productSchema, 'Product'),
       404: errorResponses[404],

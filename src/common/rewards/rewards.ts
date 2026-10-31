@@ -153,12 +153,26 @@ export async function award(tx: Executor, input: AwardInput): Promise<AwardResul
  * just cannot accumulate anything a leaderboard or a marketplace honours.
  * Checked here rather than at each call site so a new earn path cannot forget.
  */
-export async function assertCanEarn(tx: Executor, userId: number): Promise<void> {
+export async function canEarn(tx: Executor, userId: number): Promise<boolean> {
   const [row] = await tx
     .select({ verifiedAt: users.emailVerifiedAt })
     .from(users)
     .where(eq(users.id, userId));
-  if (!row?.verifiedAt) {
+  return row?.verifiedAt != null;
+}
+
+/**
+ * Throws when the caller may not earn.
+ *
+ * Use this ONLY where earning is the entire point of the request. On a path
+ * that also does something the user is entitled to regardless — finishing
+ * onboarding, logging a day — call `canEarn` and skip the grant instead.
+ * Throwing there takes the whole feature down with the reward, which is
+ * exactly how an unverified account ended up unable to get a baseline and
+ * therefore unable to use the product at all.
+ */
+export async function assertCanEarn(tx: Executor, userId: number): Promise<void> {
+  if (!(await canEarn(tx, userId))) {
     throw new DomainError('POINTS_003', 'Verify your email address to start earning points.', 403);
   }
 }

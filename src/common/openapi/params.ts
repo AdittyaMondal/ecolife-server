@@ -10,12 +10,23 @@ export const idParam = z.object({
     .openapi({ param: { name: 'id', in: 'path' }, example: 42 }),
 });
 
-export const slugParam = z.object({
-  slug: z
-    .string()
-    .min(1)
-    .openapi({ param: { name: 'slug', in: 'path' }, example: 'beach-cleanup-versova' }),
-});
+/**
+ * A `{slug}` path parameter.
+ *
+ * `example` is required, because the examples in this document ARE the mock
+ * both clients develop against and the value anyone exploring /docs will
+ * send first. A shared example cannot be right for two namespaces: the same
+ * string was previously offered for events and for products, so trying
+ * either produced a confusing 404 against a perfectly working endpoint.
+ * Pass a slug the seed actually creates.
+ */
+export const slugParam = (example: string) =>
+  z.object({
+    slug: z
+      .string()
+      .min(1)
+      .openapi({ param: { name: 'slug', in: 'path' }, example }),
+  });
 
 /** Keyset pagination. A cursor is opaque to the client by design. */
 export const cursorQuery = z.object({

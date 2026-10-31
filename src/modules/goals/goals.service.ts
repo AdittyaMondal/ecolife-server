@@ -247,11 +247,14 @@ export async function create(userId: number, body: GoalBody) {
 }
 
 export async function patch(userId: number, id: number, body: Partial<GoalBody>) {
-  const { user, baselineKgPerDay } = await context(userId);
+  // Ownership BEFORE onboarding state. The other order answered "finish
+  // onboarding" (403) for a goal id that does not exist, which is both the
+  // wrong code and a hint about a row the caller has no business knowing of.
   const existing = await repo.findOwned(userId, id);
   if (existing?.status !== 'active') {
     throw new DomainError('GOAL_004', 'No active goal with that id.', 404);
   }
+  const { user, baselineKgPerDay } = await context(userId);
 
   const merged: GoalBody = {
     type: body.type ?? (existing.type as GoalType),

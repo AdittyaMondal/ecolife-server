@@ -5763,7 +5763,7 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "example": "beach-cleanup-versova"
+              "example": "tulsi-sapling"
             },
             "required": true,
             "name": "slug",
@@ -7065,7 +7065,7 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "example": "beach-cleanup-versova"
+              "example": "versova-beach-cleanup"
             },
             "required": true,
             "name": "slug",

@@ -67,7 +67,7 @@ eventRoutes.openapi(
     summary: 'Event detail with viewer-relative state',
     middleware: [requireUser] as const,
     security: secured,
-    request: { params: slugParam },
+    request: { params: slugParam('versova-beach-cleanup') },
     responses: {
       200: jsonOk(eventSchema, 'Event'),
       403: errorResponses[403],
