@@ -8619,8 +8619,8 @@
               }
             }
           },
-          "401": {
-            "description": "Not authenticated",
+          "400": {
+            "description": "Validation failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -8629,8 +8629,8 @@
               }
             }
           },
-          "501": {
-            "description": "Not implemented yet",
+          "401": {
+            "description": "Not authenticated",
             "content": {
               "application/json": {
                 "schema": {
@@ -8707,16 +8707,6 @@
           },
           "404": {
             "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet",
             "content": {
               "application/json": {
                 "schema": {
@@ -8859,16 +8849,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Not implemented yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
           }
         }
       }
@@ -8932,8 +8912,8 @@
               }
             }
           },
-          "501": {
-            "description": "Not implemented yet",
+          "400": {
+            "description": "Validation failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -8988,16 +8968,6 @@
                     "data",
                     "error"
                   ]
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
                 }
               }
             }

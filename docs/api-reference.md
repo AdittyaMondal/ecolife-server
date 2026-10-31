@@ -1536,7 +1536,7 @@ Seven ordered checks (PRD-v2 §6.6.4):
 | Code | Meaning | `data` |
 |---|---|---|
 | `200` | Matching cities | object |
-| `501` | Not implemented yet | null |
+| `400` | Validation failed | null |
 
 ### `GET` `/api/v1/notifications`
 
@@ -1556,8 +1556,8 @@ Seven ordered checks (PRD-v2 §6.6.4):
 | Code | Meaning | `data` |
 |---|---|---|
 | `200` | Notifications | object |
+| `400` | Validation failed | null |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `PATCH` `/api/v1/notifications/{id}/read`
 
@@ -1578,7 +1578,6 @@ Seven ordered checks (PRD-v2 §6.6.4):
 | `200` | Marked read | [`Notification`](#notification) |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/regions`
 
@@ -1591,7 +1590,6 @@ Seven ordered checks (PRD-v2 §6.6.4):
 | Code | Meaning | `data` |
 |---|---|---|
 | `200` | Regions | object |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/uploads/presign`
 
@@ -1640,7 +1638,6 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | Code | Meaning | `data` |
 |---|---|---|
 | `200` | Factor table | [`Methodology`](#methodology) |
-| `501` | Not implemented yet | null |
 
 ---
 

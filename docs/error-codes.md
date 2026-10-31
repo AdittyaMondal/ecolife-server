@@ -83,3 +83,22 @@ into the client repos' copy of this file.
 |---|---|---|
 | `POINTS_001` | 422 | Coin balance would go negative. |
 | `POINTS_002` | 409 | Reward already granted for this `(source, sourceId)`. Treated as a no-op, not an error. |
+
+## Organizations
+
+Thrown by `requireOrgRole` (`src/common/guards/auth.guard.ts`). Status is read live
+from the database on every request, so a suspension takes effect immediately
+rather than when the caller's access token happens to expire.
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `ORG_001` | 403 | Caller belongs to no organization. |
+| `ORG_002` | 403 | The organization is not `approved`. `details.status` carries `pending`, `rejected` or `suspended`. |
+| `ORG_003` | 403 | Wrong organization type for this action. |
+| `ORG_004` | 403 | Organization owner only. |
+
+## Reference and notifications
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `NOTIF_001` | 404 | No such notification **for this user**. A notification belonging to someone else returns this same 404, never 403 — a 403 would confirm the id exists. |

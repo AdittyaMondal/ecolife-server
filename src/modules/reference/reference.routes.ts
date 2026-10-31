@@ -1,3 +1,5 @@
+import { requireUser } from '@common/guards/auth.guard.ts';
+import { ok } from '@common/interceptors/response-envelope.ts';
 import { errorResponses, jsonOk, notImplemented, secured } from '@common/openapi/envelope.ts';
 import { createModule } from '@common/openapi/factory.ts';
 import { cursorQuery, idParam, paginated } from '@common/openapi/params.ts';
@@ -10,6 +12,7 @@ import {
   presignResultSchema,
   regionSchema,
 } from './reference.schema.ts';
+import * as service from './reference.service.ts';
 
 export const referenceRoutes = createModule();
 
@@ -29,10 +32,10 @@ referenceRoutes.openapi(
     },
     responses: {
       200: jsonOk(z.object({ items: z.array(citySchema) }), 'Matching cities'),
-      501: errorResponses[501],
+      400: errorResponses[400],
     },
   }),
-  notImplemented,
+  async (c) => ok(c, { items: await service.searchCities(c.req.valid('query').q) }, 200),
 );
 
 referenceRoutes.openapi(
@@ -43,10 +46,9 @@ referenceRoutes.openapi(
     summary: 'Regions with their grid emission factor and tariff',
     responses: {
       200: jsonOk(z.object({ items: z.array(regionSchema) }), 'Regions'),
-      501: errorResponses[501],
     },
   }),
-  notImplemented,
+  async (c) => ok(c, { items: await service.listRegions() }, 200),
 );
 
 export const carbonRoutes = createModule();
@@ -60,10 +62,9 @@ carbonRoutes.openapi(
     description: 'Rendered at /methodology on web. No auth: it is the credibility surface.',
     responses: {
       200: jsonOk(methodologySchema, 'Factor table'),
-      501: errorResponses[501],
     },
   }),
-  notImplemented,
+  (c) => ok(c, service.methodology(), 200),
 );
 
 export const uploadRoutes = createModule();
@@ -100,15 +101,19 @@ notificationRoutes.openapi(
     path: '/',
     tags: ['reference'],
     summary: 'In-app notifications',
+    middleware: [requireUser] as const,
     security: secured,
     request: { query: cursorQuery },
     responses: {
       200: jsonOk(paginated(notificationSchema), 'Notifications'),
+      400: errorResponses[400],
       401: errorResponses[401],
-      501: errorResponses[501],
     },
   }),
-  notImplemented,
+  async (c) => {
+    const { cursor, limit } = c.req.valid('query');
+    return ok(c, await service.listNotifications(c.get('user').id, limit, cursor), 200);
+  },
 );
 
 notificationRoutes.openapi(
@@ -117,14 +122,14 @@ notificationRoutes.openapi(
     path: '/{id}/read',
     tags: ['reference'],
     summary: 'Mark one notification read',
+    middleware: [requireUser] as const,
     security: secured,
     request: { params: idParam },
     responses: {
       200: jsonOk(notificationSchema, 'Marked read'),
       401: errorResponses[401],
       404: errorResponses[404],
-      501: errorResponses[501],
     },
   }),
-  notImplemented,
+  async (c) => ok(c, await service.markRead(c.get('user').id, c.req.valid('param').id), 200),
 );
