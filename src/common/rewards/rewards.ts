@@ -1,5 +1,4 @@
 import { DomainError } from '@common/errors/domain-error.ts';
-import { env } from '@config/env.ts';
 import type { db } from '@database/client.ts';
 import { rewardTransactions, users } from '@database/schema/index.ts';
 import { and, eq, sql } from 'drizzle-orm';
