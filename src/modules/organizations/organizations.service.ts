@@ -203,7 +203,43 @@ export async function members(userId: number, organizationId: number) {
       user: { id: r.id, name: r.name, avatarUrl: r.avatarUrl, city: r.city },
       role: r.role,
       joinedAt: r.joinedAt.toISOString(),
+      pointsTotal: r.pointsTotal ?? 0,
+      baselineTotalKg: r.baselineTotalKg != null ? Number(r.baselineTotalKg) : null,
     })),
+  };
+}
+
+export async function joinByCode(userId: number, code: string) {
+  if (await repo.findMembership(userId)) {
+    throw new DomainError('ORG_005', 'You already belong to an organization.', 409);
+  }
+
+  const org = await repo.findByCode(code);
+  if (!org) {
+    throw new DomainError('ORG_007', 'No organization found with that code.', 404);
+  }
+
+  if (org.status !== 'approved') {
+    throw new DomainError('ORG_002', `This organization is ${org.status}. Only approved organizations can accept members.`, 403);
+  }
+
+  try {
+    await repo.insertMember(db, {
+      organizationId: org.id,
+      userId,
+      role: 'member',
+    });
+  } catch (error) {
+    if ((error as { cause?: { constraint?: string } }).cause?.constraint === 'one_org_per_user') {
+      throw new DomainError('ORG_005', 'You already belong to an organization.', 409);
+    }
+    throw error;
+  }
+
+  return {
+    joined: true as const,
+    organization: serialise(org, false),
+    role: 'member' as const,
   };
 }
 

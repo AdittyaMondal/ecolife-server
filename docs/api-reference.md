@@ -4,7 +4,7 @@
 > Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
 > fails CI when this file is stale.
 
-**Version** 0.1.0 · **Base path** `/api/v1` · **63 paths** · **74 operations** · **91 schemas**
+**Version** 0.1.0 · **Base path** `/api/v1` · **64 paths** · **75 operations** · **93 schemas**
 
 ---
 
@@ -69,7 +69,7 @@ an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` acce
 - [leaderboard](#leaderboard) — 2 operations
 - [marketplace](#marketplace) — 14 operations
 - [events](#events) — 13 operations
-- [organizations](#organizations) — 9 operations
+- [organizations](#organizations) — 10 operations
 - [reference](#reference) — 5 operations
 - [carbon](#carbon) — 1 operation
 - [Schemas](#schemas)
@@ -1475,6 +1475,7 @@ Seven ordered checks (PRD-v2 §6.6.4):
 | `GET` | [`/api/v1/organizations/{id}/members`](#get-api-v1-organizations-id-members) 🔒 | Roster — any member may read it |
 | `POST` | [`/api/v1/organizations/{id}/members`](#post-api-v1-organizations-id-members) 🔒 | Add a member by email (owner only) |
 | `DELETE` | [`/api/v1/organizations/{id}/members/{userId}`](#delete-api-v1-organizations-id-members-userid) 🔒 | Remove another member (owner only) |
+| `POST` | [`/api/v1/organizations/join`](#post-api-v1-organizations-join) 🔒 | Join an organization using its code or slug |
 | `GET` | [`/api/v1/organizations/me`](#get-api-v1-organizations-me) 🔒 | The caller's own organization, if any |
 | `DELETE` | [`/api/v1/organizations/me/membership`](#delete-api-v1-organizations-me-membership) 🔒 | Leave your organization |
 
@@ -1682,6 +1683,29 @@ To remove yourself, use DELETE /organizations/me/membership — the answer diffe
 | `404` | Not found | null |
 | `422` | Domain rule violation | null |
 
+### `POST` `/api/v1/organizations/join`
+
+**Join an organization using its code or slug**
+
+🔒 Requires a bearer token.
+
+**Request body** (required) — [`JoinOrganizationBody`](#joinorganizationbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `code` | string | yes | Organization code or slug. e.g. `"acme-industries"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Joined successfully | [`JoinOrganizationResult`](#joinorganizationresult) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+| `409` | Conflict | null |
+
 ### `GET` `/api/v1/organizations/me`
 
 **The caller's own organization, if any**
@@ -1848,7 +1872,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 
 ## Schemas
 
-91 named components.
+93 named components.
 
 ### ActiveGoalSummary
 
@@ -2211,6 +2235,20 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `avgKgPerDay` | number | yes | e.g. `7.18` |
 | `changeVsLastWeekPct` | number | yes | e.g. `-8.9` |
 
+### JoinOrganizationBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `code` | string | yes | Organization code or slug. e.g. `"acme-industries"` |
+
+### JoinOrganizationResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `joined` | `true` | yes |  |
+| `organization` | [`Organization`](#organization) | yes |  |
+| `role` | `owner` \| `member` | yes | e.g. `"owner"` |
+
 ### LeaderboardPeek
 
 | Field | Type | Required | Notes |
@@ -2470,6 +2508,8 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `user` | [`UserSummary`](#usersummary) | yes |  |
 | `role` | `owner` \| `member` | yes | e.g. `"owner"` |
 | `joinedAt` | string | yes | e.g. `"2026-11-01T09:00:00.000Z"` |
+| `pointsTotal` | integer | no | e.g. `450` |
+| `baselineTotalKg` | number,null | no | e.g. `6.8` |
 
 ### OrganizationMemberList
 

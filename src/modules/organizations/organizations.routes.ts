@@ -7,6 +7,8 @@ import { createRoute, z } from '@hono/zod-openapi';
 import {
   addMemberBodySchema,
   createOrganizationBodySchema,
+  joinOrganizationBodySchema,
+  joinResultSchema,
   leaveResultSchema,
   myOrganizationSchema,
   organizationMemberListSchema,
@@ -212,6 +214,29 @@ organizationRoutes.openapi(
     },
   }),
   async (c) => ok(c, await service.leave(c.get('user').id), 200),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/join',
+    tags: ['organizations'],
+    summary: 'Join an organization using its code or slug',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      body: { content: { 'application/json': { schema: joinOrganizationBodySchema } }, required: true },
+    },
+    responses: {
+      200: jsonOk(joinResultSchema, 'Joined successfully'),
+      400: errorResponses[400],
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+      409: errorResponses[409],
+    },
+  }),
+  async (c) => ok(c, await service.joinByCode(c.get('user').id, c.req.valid('json').code), 200),
 );
 
 /** Mounted at /admin/organizations. Every route here is staff-only. */

@@ -1,6 +1,11 @@
 import type { Executor } from '@common/rewards/rewards.ts';
 import { db } from '@database/client.ts';
-import { organizationMembers, organizations, users } from '@database/schema/index.ts';
+import {
+  lifestyleProfiles,
+  organizationMembers,
+  organizations,
+  users,
+} from '@database/schema/index.ts';
 import { and, asc, desc, eq, lt, sql } from 'drizzle-orm';
 
 /** Every Drizzle query for the organizations module. */
@@ -70,19 +75,37 @@ export async function findMemberRole(organizationId: number, userId: number, tx:
   return row?.role ?? null;
 }
 
+export async function findByCode(code: string, tx: Executor = db) {
+  const trimmed = code.trim();
+  const asId = Number.parseInt(trimmed, 10);
+  if (Number.isInteger(asId) && String(asId) === trimmed) {
+    const byId = await findById(asId, tx);
+    if (byId) return byId;
+  }
+  const [row] = await tx
+    .select(ORG_COLUMNS)
+    .from(organizations)
+    .where(sql`lower(${organizations.slug}) = ${trimmed.toLowerCase()}`);
+  return row ?? null;
+}
+
 export function listMembers(organizationId: number) {
   return (
     db
       .select({
         id: users.id,
         name: users.name,
+        email: users.email,
         avatarUrl: users.avatarUrl,
         city: users.city,
+        pointsTotal: users.pointsTotal,
         role: organizationMembers.role,
         joinedAt: organizationMembers.joinedAt,
+        baselineTotalKg: lifestyleProfiles.baselineTotalKg,
       })
       .from(organizationMembers)
       .innerJoin(users, eq(users.id, organizationMembers.userId))
+      .leftJoin(lifestyleProfiles, eq(lifestyleProfiles.userId, users.id))
       .where(eq(organizationMembers.organizationId, organizationId))
       // Owners first, then oldest member first — the list reads as a hierarchy.
       .orderBy(asc(organizationMembers.role), asc(organizationMembers.joinedAt))
