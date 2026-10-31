@@ -50,6 +50,24 @@ export async function rotateSession(
 
   if (!row) return { ok: false, reason: 'unknown' };
 
+  /**
+   * Reuse is checked BEFORE expiry, deliberately.
+   *
+   * The other order lets a stolen token that has since expired return
+   * 'expired' and slip past family revocation — so an attacker replaying an
+   * old token gets a quiet no-op instead of burning the session family and
+   * alerting the real user. A revoked token presented again is reuse whether
+   * or not it has also aged out.
+   */
+  if (row.revokedAt) {
+    await db
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.familyId, row.familyId), isNull(sessions.revokedAt)))
+      .execute();
+    return { ok: false, reason: 'reused' };
+  }
+
   if (row.expiresAt.getTime() < Date.now()) return { ok: false, reason: 'expired' };
 
   /**

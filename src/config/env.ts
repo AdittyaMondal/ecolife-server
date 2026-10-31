@@ -42,6 +42,23 @@ const envSchema = z.object({
   INTERNAL_PROXY_TOKEN: z.string().min(32).optional(),
   /** Number of proxy hops we actually operate, counted from the right of XFF. */
   TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+
+  /**
+   * Serve the browsable API reference at /docs.
+   *
+   * Its own flag, deliberately not keyed off NODE_ENV: turning the whole app
+   * to 'development' just to get a docs page would also drop `secure` from
+   * the refresh-token cookie, sending a 30-day credential over plain HTTP.
+   * One switch, one effect.
+   *
+   * Set API_DOCS_TOKEN alongside it to require `?token=`. The page lists every
+   * endpoint, parameter and shape, which is a free map for anyone probing.
+   */
+  ENABLE_API_DOCS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  API_DOCS_TOKEN: z.string().min(16).optional(),
   /** Deep-link scheme used by event passes: ecolife://pass/{code} */
   MOBILE_SCHEME: z.string().min(1).default('ecolife'),
 

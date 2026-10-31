@@ -2,6 +2,7 @@ import { DomainError } from '@common/errors/domain-error.ts';
 import { requireUser } from '@common/guards/auth.guard.ts';
 import { ok } from '@common/interceptors/response-envelope.ts';
 import {
+  assertNotLockedOut,
   BUCKETS,
   clientIp,
   consume,
@@ -91,6 +92,10 @@ authRoutes.openapi(
   async (c) => {
     const body = c.req.valid('json');
     await consumeForIp(c, BUCKETS.authStrict);
+    // Also per-email. Without it one address can be hammered from many hosts:
+    // once verification mail is wired that is an email-bombing primitive, and
+    // the 409 for an existing account makes it an enumeration loop today.
+    await consume(`register:${body.email.toLowerCase()}`, BUCKETS.authStrict);
 
     const r = await service.register(body, metaOf(c));
     service.deliverEmailToken('verify', body.email, r.verificationToken);
@@ -128,9 +133,15 @@ authRoutes.openapi(
     // Per-IP on every attempt: one host spraying many accounts.
     await consumeForIp(c, BUCKETS.authStrict);
 
-    // The identifier buckets are charged only when the attempt FAILS.
-    // Counting successes too would let anyone who knows your address lock you
-    // out with ten bad guesses.
+    // Then a read-only check of THIS attacker's bucket for THIS account,
+    // before the password is verified. Charging only on failure is what stops
+    // a stranger locking you out — but without this check nothing consults
+    // those buckets at all, and where no client IP is available the per-IP
+    // limiter skips, leaving guesses unlimited. Rejecting here even when the
+    // password happens to be right is the point: a correct guess arrived at
+    // by brute force is still brute force.
+    await assertNotLockedOut(c, body.email, BUCKETS.authStrict);
+
     let r: Awaited<ReturnType<typeof service.login>>;
     try {
       r = await service.login(body.email, body.password, metaOf(c));

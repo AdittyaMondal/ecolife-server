@@ -141,9 +141,32 @@ install is `--prod`: `drizzle-kit` drags in esbuild, whose postinstall shells
 out to `node install.js`, and the Bun runtime image has no node. That
 postinstall is what broke the first hosted build.
 
-**`/docs` is absent in production** (`NODE_ENV=production`), by design — see
-`src/app.ts`. `/openapi.json` and `docs/api-reference.md` cover the same need
-without executing a third-party bundle on our own origin.
+### Seeing the API reference on a deployed server
+
+`/docs` is off in production by default. To turn it on for the team, set **two**
+variables in Dokploy's Environment:
+
+```
+ENABLE_API_DOCS=true
+API_DOCS_TOKEN=<32+ random chars>     # then open /docs?token=…
+```
+
+Verified behaviour:
+
+| NODE_ENV | ENABLE_API_DOCS | API_DOCS_TOKEN | `/docs` |
+|---|---|---|---|
+| production | unset | — | 404 |
+| production | true | unset | 200, public |
+| production | true | set | 404 without `?token=`, 200 with it |
+| development | — | — | 200 |
+
+**Do not set `NODE_ENV=development` to get the docs page.** That flag also
+controls `secure` on the refresh-token cookie, so flipping it sends a 30-day
+credential over plain HTTP. One switch, one effect — that is why the docs have
+their own flag.
+
+Always available regardless, and executing nobody else's code:
+`/openapi.json` and the committed `docs/api-reference.md`.
 
 **Health probes:** use `/api/v1/health` for liveness (touches nothing) and
 `/api/v1/health/ready` for readiness (hits Postgres). Pointing liveness at
