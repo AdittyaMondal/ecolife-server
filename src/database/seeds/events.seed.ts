@@ -194,7 +194,17 @@ const sha256 = (input: string) => new Bun.CryptoHasher('sha256').update(input).d
  * forgets — nothing here can be scanned, which is the correct trade and worth
  * knowing before someone goes looking for a test QR.
  */
+const EVENT_COVERS: Record<string, string> = {
+  'terrace-composting-workshop': 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=1200&q=80',
+  'versova-beach-cleanup': 'https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?auto=format&fit=crop&w=1200&q=80',
+  'cubbon-park-plant-drive': 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1200&q=80',
+  'powai-lake-cleanup': 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1200&q=80',
+  'ewaste-collection-drive': 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80',
+  'balcony-garden-starter': 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=1200&q=80',
+};
+
 export async function seedEvents(
+
   tx: Tx,
   seeded: readonly SeededUser[],
 ): Promise<{ events: number; hosts: number; passes: number; rewards: RewardRow[] }> {
@@ -215,7 +225,9 @@ export async function seedEvents(
         type: e.type,
         status: e.status,
         visibility: e.visibility,
-        coverUrl: `https://cdn.ecolife.app/events/${e.slug}.webp`,
+        coverUrl:
+          EVENT_COVERS[e.slug] ??
+          'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1200&q=80',
         hostId: byEmail(e.hostEmail).id,
         startAt: hoursFromNow(e.startInHours),
         endAt: hoursFromNow(e.startInHours + e.durationHours),

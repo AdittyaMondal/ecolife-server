@@ -88,7 +88,7 @@ function stateOf(profile: ProfileRow) {
   const completedSteps = answeredSteps(profile);
   return {
     completedSteps,
-    complete: completedSteps === 5,
+    complete: completedSteps === 5 && profile.baselineTotalKg !== null,
     answers: answersOf(profile),
   };
 }
@@ -107,7 +107,7 @@ export async function onboardingState(userId: number) {
  */
 export async function saveStep(userId: number, step: number, body: unknown) {
   const profile = await repo.ensureProfile(userId);
-  if (profile.completedSteps >= 5 && answeredSteps(profile) === 5) {
+  if (profile.baselineTotalKg !== null && profile.completedSteps >= 5 && answeredSteps(profile) === 5) {
     // Editing after completion goes through PATCH /profile, which recomputes
     // the baseline forward. The wizard route would skip that.
     throw new DomainError(
@@ -266,18 +266,18 @@ export async function completeOnboarding(userId: number) {
       tx,
     );
 
+    const user = await repo.findUser(userId);
     await repo.updateUser(
       userId,
       {
         city: profile.city,
         regionCode: profile.regionCode,
-        onboardedAt: new Date(),
+        onboardedAt: user?.onboardedAt ?? new Date(),
       },
       tx,
     );
 
     if (!earns) {
-      const user = await repo.findUser(userId);
       return {
         awarded: false,
         pointsTotal: user?.pointsTotal ?? 0,
