@@ -207,6 +207,16 @@
           "unreadNotifications": {
             "type": "integer",
             "example": 2
+          },
+          "organization": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberOrganization"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -221,7 +231,8 @@
           "onboardingComplete",
           "completedSteps",
           "wallet",
-          "unreadNotifications"
+          "unreadNotifications",
+          "organization"
         ]
       },
       "Wallet": {
@@ -239,6 +250,58 @@
         "required": [
           "pointsTotal",
           "coinsBalance"
+        ]
+      },
+      "MemberOrganization": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 12
+          },
+          "slug": {
+            "type": "string",
+            "example": "acme-industries"
+          },
+          "name": {
+            "type": "string",
+            "example": "Acme Industries"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "industry",
+              "ngo",
+              "seller"
+            ],
+            "example": "industry"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "suspended"
+            ],
+            "example": "approved"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "member"
+            ],
+            "example": "owner"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "type",
+          "status",
+          "role"
         ]
       },
       "RegisterBody": {
@@ -3340,16 +3403,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Not implemented yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
           }
         }
       }
@@ -3420,16 +3473,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Not implemented yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
           }
         }
       }
@@ -3482,16 +3525,6 @@
           },
           "401": {
             "description": "Not authenticated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet",
             "content": {
               "application/json": {
                 "schema": {
@@ -3607,16 +3640,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Not implemented yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
           }
         }
       }
@@ -3676,16 +3699,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Not implemented yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
           }
         }
       }
@@ -3733,16 +3746,6 @@
           },
           "429": {
             "description": "Rate limited — see Retry-After",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet",
             "content": {
               "application/json": {
                 "schema": {
@@ -3810,16 +3813,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Not implemented yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
           }
         }
       }
@@ -3873,16 +3866,6 @@
           },
           "422": {
             "description": "Domain rule violation",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet",
             "content": {
               "application/json": {
                 "schema": {

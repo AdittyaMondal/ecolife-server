@@ -34,9 +34,11 @@ export * from './lifestyle-profiles.ts';
 // Supporting
 export * from './notifications.ts';
 export * from './orders.ts';
+export * from './organizations.ts';
 // Marketplace
 export * from './products.ts';
 export * from './push-tokens.ts';
+export * from './rate-limits.ts';
 // Reference
 export * from './regions.ts';
 // Economy
