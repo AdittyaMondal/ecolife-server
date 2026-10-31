@@ -135,6 +135,20 @@ export const reviewOrganizationBodySchema = z
   .object({
     decision: z.enum(['approve', 'reject', 'suspend', 'reinstate']).openapi({ example: 'approve' }),
     note: z.string().max(1000).optional().openapi({ example: 'GST certificate checked.' }),
+    /**
+     * The name the admin is looking at, echoed back.
+     *
+     * Required, and not optional-with-a-fallback, because an optional
+     * safety check is one the client eventually stops sending. It closes
+     * the window between opening the review queue and clicking approve: an
+     * owner who renames in between would otherwise have a name the admin
+     * never saw stamped with that admin's approval.
+     */
+    expectedName: z
+      .string()
+      .min(1)
+      .max(120)
+      .openapi({ example: 'Acme Industries', description: 'The name shown in the queue' }),
   })
   .openapi('ReviewOrganizationBody');
 
