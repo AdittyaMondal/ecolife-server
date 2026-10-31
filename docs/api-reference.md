@@ -10,18 +10,21 @@
 
 ## Before you read this
 
-**This is the contract, not the behaviour.** Every endpoint below is declared, typed
-and documented. Only `/health` is implemented today — every other route returns
-`GEN_501` on the real server. Develop against the Prism mock, which serves the
-examples in this document:
+**Every endpoint below is implemented.** All 65 operations run against the real
+database; none returns `GEN_501` any more. Point your client at the server, not
+at the mock — the mock serves the *examples* in this document, so it will happily
+return a plausible shape for a request the real server would reject.
 
 ```bash
-cd ecolife-server && pnpm mock      # :4010, every endpoint answers
-pnpm dev                            # :4000, only /health answers
+cd ecolife-server && pnpm dev       # :4000, the real thing
+pnpm mock                           # :4010, examples only — shapes, not behaviour
 ```
 
 Point a client at one or the other with a single env var — `NEXT_PUBLIC_API_URL`
 on web, `EXPO_PUBLIC_API_URL` on mobile. No code change.
+
+The mock remains useful for one thing: building a screen before the endpoint it
+needs exists. That is no longer the case for anything in this document.
 
 ### The envelope
 

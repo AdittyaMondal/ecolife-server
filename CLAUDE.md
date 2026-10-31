@@ -44,29 +44,46 @@ Markers used in PRD-v2:
 
 ## 2. Current state — read this before assuming something exists
 
-> **Sprint 0 is complete: the contract exists, the behaviour does not.**
-> All 55 endpoints are declared, typed and documented. Every handler throws `GEN_501`.
+> **Every endpoint is implemented.** All 65 operations across 55 paths run against the
+> real database. No route returns `GEN_501`, and `notImplemented()` has no call sites left.
 
 What exists:
 
 - Env config, zod-validated, fails fast at boot
 - Drizzle client on the **pooled** endpoint; migrator on the **direct** endpoint
-- An empty schema barrel at `src/database/schema/index.ts`
+- **21 tables**, migrations `0000`–`0004` applied, with the `[LESSON]` invariants enforced
+  by the database rather than by a service remembering (see §4.3)
 - `OpenAPIHono` app with request-id, logging, secure headers, CORS
 - Response envelope, typed `DomainError`, error and not-found filters
-- **The full API contract** — 9 modules, 55 paths, zod request/response schemas with realistic
+- **The full API contract** — 55 paths, zod request/response schemas with realistic
   examples, generated to a committed `openapi.json`
 - `docs/error-codes.md` — the code registry both clients branch on
-- `health` module, fully implemented
-- Tests covering the connection layer and the envelope
+- `docs/api-reference.md`, `docs/overview.md`, `docs/enums.md`
+- The carbon engine: baseline AND daily, `src/common/carbon/`
+- The reward ledger, `src/common/rewards/` — every earn and spend goes through `award()`
+- Neon Object Storage, `src/common/storage/`
+- **All ten modules**: health, auth, profile, track, goals, leaderboard, home,
+  marketplace, events, reference
+- A seed (`pnpm seed`) producing 25 users, 1,440 footprints, 24 products, 6 events
+- **185 tests**, including the money path, the QR check-in flow and the anti-farming rules
 
-**What does not exist:** any table, any migration, auth, guards, the carbon engine, any domain
-service or repository, jobs, WebSocket, seeds. Every route outside `health` is a declared
-contract backed by `notImplemented()`. Do not claim otherwise, and do not import from an empty
-directory.
+**What does not exist:** `src/jobs/` and `src/ws/` are still empty — no scheduler, no
+WebSocket. `POST /uploads/presign` needs `S3_BUCKET` and the `AWS_*` variables or it
+answers `UPLOAD_002`/503; every other endpoint works without them.
 
-The database is live and reachable but has **zero tables**. `pnpm migration:generate` reports
-nothing to do until the schema in PRD-v2 §7 is written (ticket SRV-04).
+Known gaps, written down rather than discovered later:
+
+- `invite_only` events are UNLISTED, not access-controlled. There is no invitations
+  table, so anyone who learns a slug can still join one.
+- A goal that settles while the user is unverified is never paid, even after they
+  verify. Settlement is one-shot and there is no pending-rewards concept.
+- `contentType` on an upload is a client claim. Magic-byte verification after upload
+  is still owed (PRD-v2 §6.7), and the bucket is `public_read`.
+
+The database is live, migrated and seeded. **Tests share it with the app** by deliberate
+choice, and sweep the `@example.test` / `@example.com` / `@ecolife.invalid` namespaces
+afterwards — see `src/common/testing/setup.ts` before adding a test that creates accounts
+outside those domains.
 
 ---
 
@@ -117,9 +134,8 @@ by-product.
   `gen:api` and get compile errors at the affected call sites.
 - Declare only the status codes a route can actually produce. A documented 409 on an endpoint
   that cannot conflict is a lie the clients write dead branches against.
-- **Every route currently declares `501`, because every handler currently throws it. Remove
-  that `501` from a route the moment you implement it**, and regenerate. Leaving it behind is
-  exactly the dead branch the previous bullet warns about — it just happens to be true today.
+- **No route declares `501` any more.** If you add one, it is a lie the clients will write a
+  dead branch against — the previous bullet, in its most common form.
 
 ### 4.1 Every response uses the envelope
 
