@@ -2,7 +2,7 @@
   "name": "ecolife-server",
   "version": "0.1.0",
   "private": true,
-  "description": "EcoLife API server — Bun + Hono + Drizzle + PostgreSQL",
+  "description": "EcoLife API server \u2014 Bun + Hono + Drizzle + PostgreSQL",
   "type": "module",
   "packageManager": "pnpm@12.5.1",
   "engines": {
@@ -18,9 +18,13 @@
     "test": "bun test",
     "migration:generate": "bun --bun drizzle-kit generate",
     "migration:apply": "bun src/database/migrate.ts",
-    "db:studio": "bun --bun drizzle-kit studio"
+    "db:studio": "bun --bun drizzle-kit studio",
+    "gen:openapi": "bun run scripts/gen-openapi.ts",
+    "gen:openapi:check": "bun run scripts/gen-openapi.ts --check",
+    "mock": "bunx @stoplight/prism-cli@5.16.0 mock openapi.json -p 4010"
   },
   "dependencies": {
+    "@hono/zod-openapi": "1.6.3",
     "drizzle-orm": "^0.44.6",
     "hono": "^4.10.3",
     "pg": "^8.16.3",
