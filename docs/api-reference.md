@@ -4,7 +4,7 @@
 > Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
 > fails CI when this file is stale.
 
-**Version** 0.1.0 · **Base path** `/api/v1` · **55 paths** · **65 operations** · **79 schemas**
+**Version** 0.1.0 · **Base path** `/api/v1` · **55 paths** · **65 operations** · **80 schemas**
 
 ---
 
@@ -140,7 +140,6 @@ Always 200, whether or not the address exists — it must not leak registration.
 |---|---|---|
 | `200` | Accepted | [`OkMessage`](#okmessage) |
 | `429` | Rate limited — see Retry-After | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/auth/login`
 
@@ -164,7 +163,6 @@ Failures are deliberately indistinguishable between unknown and wrong-password.
 | `200` | Signed in | [`AuthResult`](#authresult) |
 | `401` | Not authenticated | null |
 | `429` | Rate limited — see Retry-After | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/auth/logout`
 
@@ -191,7 +189,6 @@ Failures are deliberately indistinguishable between unknown and wrong-password.
 |---|---|---|
 | `200` | The authenticated user | [`Me`](#me) |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/auth/refresh`
 
@@ -213,7 +210,6 @@ Accepts the token from the httpOnly cookie (web) or the body (mobile). Rotates o
 |---|---|---|
 | `200` | Rotated | [`Session`](#session) |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/auth/register`
 
@@ -241,7 +237,6 @@ Rate limited to 10 per 15 minutes per IP and per email. Email verification is re
 | `400` | Validation failed | null |
 | `409` | Conflict | null |
 | `429` | Rate limited — see Retry-After | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/auth/resend-verification`
 
@@ -255,7 +250,6 @@ Rate limited to 10 per 15 minutes per IP and per email. Email verification is re
 |---|---|---|
 | `200` | Sent | [`OkMessage`](#okmessage) |
 | `429` | Rate limited — see Retry-After | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/auth/reset-password`
 
@@ -278,7 +272,6 @@ Revokes every existing session for the user on success.
 |---|---|---|
 | `200` | Password changed | [`OkMessage`](#okmessage) |
 | `422` | Domain rule violation | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/auth/verify-email`
 
@@ -298,7 +291,6 @@ Revokes every existing session for the user on success.
 |---|---|---|
 | `200` | Verified | [`OkMessage`](#okmessage) |
 | `422` | Domain rule violation | null |
-| `501` | Not implemented yet | null |
 
 ---
 
@@ -1654,7 +1646,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 
 ## Schemas
 
-79 named components.
+80 named components.
 
 ### ActiveGoalSummary
 
@@ -2053,6 +2045,18 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `completedSteps` | integer | yes | e.g. `5`. range 0…5 |
 | `wallet` | [`Wallet`](#wallet) | yes |  |
 | `unreadNotifications` | integer | yes | e.g. `2` |
+| `organization` | [`MemberOrganization`](#memberorganization) \| null | yes |  |
+
+### MemberOrganization
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `12` |
+| `slug` | string | yes | e.g. `"acme-industries"` |
+| `name` | string | yes | e.g. `"Acme Industries"` |
+| `type` | `industry` \| `ngo` \| `seller` | yes | e.g. `"industry"` |
+| `status` | `pending` \| `approved` \| `rejected` \| `suspended` | yes | e.g. `"approved"` |
+| `role` | `owner` \| `member` | yes | e.g. `"owner"` |
 
 ### Methodology
 

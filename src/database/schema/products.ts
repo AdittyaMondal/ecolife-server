@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   bigserial,
   boolean,
   check,
@@ -11,6 +12,7 @@ import {
   timestamp,
 } from 'drizzle-orm/pg-core';
 import { productCategory } from './enums.ts';
+import { organizations } from './organizations.ts';
 
 /**
  * Marketplace catalogue (PRD-v2 §6.5, §7.6).
@@ -31,6 +33,15 @@ export const products = pgTable(
     imageUrl: text('image_url'),
     stock: integer('stock').notNull().default(0),
     co2SavedKg: doublePrecision('co2_saved_kg'),
+    /**
+     * The seller that owns this row, once the Seller Portal exists. Nullable
+     * because today's catalogue is admin-managed and unowned. Added now rather
+     * than later: a column on a populated table is a migration, and this one is
+     * free while every row is still NULL.
+     */
+    sellerOrgId: bigint('seller_org_id', { mode: 'number' }).references(() => organizations.id, {
+      onDelete: 'restrict',
+    }),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -1,3 +1,4 @@
+import { nullable } from '@common/openapi/envelope.ts';
 import { walletSchema } from '@common/openapi/shared-schemas.ts';
 import { z } from '@hono/zod-openapi';
 
@@ -62,6 +63,26 @@ export const meSchema = z
     completedSteps: z.number().int().min(0).max(5).openapi({ example: 5 }),
     wallet: walletSchema,
     unreadNotifications: z.number().int().openapi({ example: 2 }),
+    /**
+     * Null for an ordinary user. Clients route to the Corporate, Community or
+     * Seller portal off `type`, and MUST treat any status other than
+     * 'approved' as read-only — an unapproved organization is a claim, not a
+     * credential.
+     */
+    organization: nullable(
+      z
+        .object({
+          id: z.number().int().openapi({ example: 12 }),
+          slug: z.string().openapi({ example: 'acme-industries' }),
+          name: z.string().openapi({ example: 'Acme Industries' }),
+          type: z.enum(['industry', 'ngo', 'seller']).openapi({ example: 'industry' }),
+          status: z
+            .enum(['pending', 'approved', 'rejected', 'suspended'])
+            .openapi({ example: 'approved' }),
+          role: z.enum(['owner', 'member']).openapi({ example: 'owner' }),
+        })
+        .openapi('MemberOrganization'),
+    ),
   })
   .openapi('Me');
 

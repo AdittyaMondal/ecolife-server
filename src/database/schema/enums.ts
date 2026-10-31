@@ -8,6 +8,29 @@ import { pgEnum } from 'drizzle-orm/pg-core';
  * breaks their codegen.
  */
 
+/**
+ * Partner organizations. The platform labels in the UI are
+ * Corporate / Community / Marketplace Partners respectively, and each maps to
+ * one portal — but those are copy and routing, not data, so they live in the
+ * clients.
+ */
+export const organizationType = pgEnum('organization_type', ['industry', 'ngo', 'seller']);
+
+/**
+ * An organization is NOT usable until an admin approves it. Anyone can claim
+ * to be a corporate partner at signup; nobody gets a portal that can list
+ * products or host official drives until a human says so.
+ */
+export const organizationStatus = pgEnum('organization_status', [
+  'pending',
+  'approved',
+  'rejected',
+  'suspended',
+]);
+
+/** A person's role inside their organization. Not a global identity. */
+export const orgMemberRole = pgEnum('org_member_role', ['owner', 'member']);
+
 export const userRole = pgEnum('user_role', ['user', 'admin']);
 
 export const dietType = pgEnum('diet_type', [
