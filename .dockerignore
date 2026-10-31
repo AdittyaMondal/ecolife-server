@@ -21,10 +21,6 @@ docs/
 biome.json
 bunfig.toml
 .github/
-.vercelignore
-vercel.json
-api/
-public/
 
 # NOTE: src/database/migrations/ is deliberately NOT ignored. `bun
 # src/database/migrate.ts` runs inside this image and needs the SQL files.

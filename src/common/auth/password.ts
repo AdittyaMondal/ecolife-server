@@ -4,9 +4,9 @@
  * argon2id via Bun's built-in — memory-hard, so a stolen hash resists GPU
  * cracking in a way bcrypt no longer reliably does. No dependency.
  *
- * NOTE for a Node deployment: `Bun.password` does not exist on Node. The
- * Vercel/serverless path would need node:crypto scrypt or an argon2 package.
- * This is the single hard Bun dependency in the codebase.
+ * NOTE: `Bun.password` does not exist on Node. This is the single hard Bun
+ * dependency in the codebase, so a Node host would need node:crypto scrypt
+ * or an argon2 package. The deployment target is the Bun container image.
  */
 export function hashPassword(plain: string): Promise<string> {
   return Bun.password.hash(plain, { algorithm: 'argon2id' });

@@ -121,7 +121,7 @@ docker run -p 4000:4000 --env-file .env.docker ecolife-server
 dotenv, which does. If a value is `DATABASE_URL="postgres://…"`, Docker passes
 the quotes as part of the value and `config/env.ts` rejects it with
 `must be a postgres:// or postgresql:// connection string`. Platforms that set
-env vars through a UI (Dokploy, Vercel, Fly) are unaffected — this only bites
+env vars through a UI (Dokploy, Fly, Render) are unaffected — this only bites
 local `--env-file` runs. Strip them first:
 
 ```bash

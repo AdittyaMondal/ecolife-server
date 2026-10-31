@@ -2,12 +2,14 @@ import { DomainError } from '@common/errors/domain-error.ts';
 import { requireUser } from '@common/guards/auth.guard.ts';
 import { ok } from '@common/interceptors/response-envelope.ts';
 import {
+  assertIdentifierNotLockedOut,
   assertNotLockedOut,
   BUCKETS,
   clientIp,
   consume,
   consumeFailedAttempt,
   consumeForIp,
+  consumeIdentifier,
 } from '@common/middleware/rate-limit.ts';
 import { errorResponses, jsonOk, secured } from '@common/openapi/envelope.ts';
 import { createModule } from '@common/openapi/factory.ts';
@@ -95,7 +97,12 @@ authRoutes.openapi(
     // Also per-email. Without it one address can be hammered from many hosts:
     // once verification mail is wired that is an email-bombing primitive, and
     // the 409 for an existing account makes it an enumeration loop today.
-    await consume(`register:${body.email.toLowerCase()}`, BUCKETS.authStrict);
+    //
+    // Split tight (email+IP) / loose (email, 5x), exactly as login is. A flat
+    // per-email bucket was its own denial of service: anyone who knew an
+    // address could spend its ten attempts and stop the real owner signing up.
+    await assertIdentifierNotLockedOut(c, 'register', body.email, BUCKETS.authStrict);
+    await consumeIdentifier(c, 'register', body.email, BUCKETS.authStrict);
 
     const r = await service.register(body, metaOf(c));
     service.deliverEmailToken('verify', body.email, r.verificationToken);
