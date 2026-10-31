@@ -4,7 +4,7 @@
 > Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
 > fails CI when this file is stale.
 
-**Version** 0.1.0 · **Base path** `/api/v1` · **55 paths** · **65 operations** · **80 schemas**
+**Version** 0.1.0 · **Base path** `/api/v1` · **55 paths** · **65 operations** · **82 schemas**
 
 ---
 
@@ -350,7 +350,7 @@ Recomputes the baseline forward only. Past daily_footprints rows carry their own
 |---|---|---|---|
 | `name` | string | no |  |
 | `timezone` | string | no |  |
-| `avatarUrl` | string,null | no |  |
+| `avatarUrl` | string,null (uri) | no | e.g. `"https://cdn.ecolife.app/avatars/abc123.webp"` |
 | `answers` | [`OnboardingAnswers`](#onboardinganswers) | no |  |
 
 **Responses**
@@ -526,7 +526,6 @@ Budget: under 250 ms p95. One round trip, one payload, no client-side fan-out.
 | `200` | Series | object |
 | `400` | Validation failed | null |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/track/logs`
 
@@ -551,10 +550,8 @@ One transaction: validate, compute 5 categories, upsert the footprint, update th
 | `200` | Footprint computed and rewards granted | [`LogResult`](#logresult) |
 | `400` | Validation failed | null |
 | `401` | Not authenticated | null |
-| `409` | Conflict | null |
 | `422` | Domain rule violation | null |
 | `429` | Rate limited — see Retry-After | null |
-| `501` | Not implemented yet | null |
 
 ### `PATCH` `/api/v1/track/logs/{id}`
 
@@ -584,7 +581,6 @@ The reduction bonus is computed once, on first submit, and is NOT re-granted on 
 | `401` | Not authenticated | null |
 | `403` | Not authorised | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/track/today`
 
@@ -598,7 +594,6 @@ The reduction bonus is computed once, on first submit, and is NOT re-granted on 
 |---|---|---|
 | `200` | Today's state | [`TrackToday`](#tracktoday) |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ---
 
@@ -1633,7 +1628,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 
 ## Schemas
 
-80 named components.
+82 named components.
 
 ### ActiveGoalSummary
 
@@ -2256,7 +2251,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `name` | string | no |  |
 | `timezone` | string | no |  |
-| `avatarUrl` | string,null | no |  |
+| `avatarUrl` | string,null (uri) | no | e.g. `"https://cdn.ecolife.app/avatars/abc123.webp"` |
 | `answers` | [`OnboardingAnswers`](#onboardinganswers) | no |  |
 
 ### PublicProfile
@@ -2361,6 +2356,25 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `accessToken` | string | yes | e.g. `"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."` |
 | `accessTokenExpiresIn` | integer | yes | seconds. e.g. `900` |
 | `refreshToken` | string,null | yes | Mobile only. Null for web, where it is an httpOnly cookie. |
+
+### StoredDailyAnswers
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `vegMeals` | integer | no | e.g. `2`. range 0…10 |
+| `nonVegMeals` | integer | no | e.g. `0`. range 0…10 |
+| `veganMeals` | integer | no | e.g. `1`. range 0…10 |
+| `acHoursBucket` | `0` \| `1_3` \| `4_8` \| `8_plus` | no | e.g. `"1_3"` |
+| `bathChoice` | `bucket` \| `short_shower` \| `long_shower` | no | e.g. `"bucket"` |
+| `wasteActions` | string[] | no |  |
+| `trips` | [`StoredTrip`](#storedtrip)[] | no |  |
+
+### StoredTrip
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `mode` | string | yes | e.g. `"bus"` |
+| `km` | number | yes | e.g. `14.5` |
 
 ### Streak
 

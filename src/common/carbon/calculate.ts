@@ -1,5 +1,10 @@
 import {
+  AC_HOURS_MIDPOINT,
+  AC_KWH_PER_HOUR,
+  type AcHoursBucket,
   AVG_FLIGHT_TRIP_KM,
+  BATH_LITRES,
+  type BathChoice,
   CAR_KEY_BY_FUEL,
   COOKING_KG_CO2_PER_UNIT,
   COOKING_UNITS_PER_PERSON_MONTH,
@@ -20,14 +25,18 @@ import {
   KWH_ESTIMATE_PER_PERSON,
   type KwhSource,
   type Level3,
+  MEALS_PER_DAY,
   MIN_PLAUSIBLE_KG,
   MSW_KG_PER_PERSON_DAY,
+  OTHER_HOUSEHOLD_LITRES_PER_DAY,
   PACKAGED_FOOD_ADD_KG,
   SOLAR_OFFSET_MULTIPLIER,
   TRANSPORT_KG_PER_KM,
   type VehicleFuel,
+  WASTE_ACTION_DELTA,
   WASTE_HABIT_MULTIPLIER,
   WASTE_KG_CO2_PER_KG,
+  WASTE_MULTIPLIER_FLOOR,
   WATER_KG_PER_LITRE,
   WATER_LITRES_PER_DAY,
   type WasteHabit,
@@ -282,4 +291,246 @@ export function computeDailyBaseline(
     clamped,
     factorVersion: FACTOR_VERSION,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The daily footprint — PRD-v2 §3.4, §3.5
+// ---------------------------------------------------------------------------
+
+/** One trip as the client sends it. `mode` is free text inside jsonb. */
+export type LoggedTrip = { mode: string; km: number };
+
+/**
+ * The 5 daily answers. `undefined` means the question was SKIPPED, and that
+ * category falls back to its baseline value.
+ *
+ * `trips: []` is therefore meaningfully different from `trips: undefined` —
+ * an empty array is the user saying "I did not travel today", which is a
+ * logged zero, while the absent key is "I did not answer", which inherits
+ * the commute they described at onboarding.
+ */
+export type DailyAnswers = {
+  trips?: LoggedTrip[];
+  vegMeals?: number;
+  nonVegMeals?: number;
+  veganMeals?: number;
+  acHoursBucket?: AcHoursBucket;
+  bathChoice?: BathChoice;
+  wasteActions?: string[];
+};
+
+/** The stored baseline components a daily calculation reuses. */
+export type StoredBaseline = {
+  baselineTransportKg: number;
+  baselineFoodKg: number;
+  baselineHomeEnergyKg: number;
+  baselineWaterKg: number;
+  baselineWasteKg: number;
+  baselineTotalKg: number;
+  baselineFlightKg: number;
+  baselineCookKg: number;
+  baselineGridBaseKg: number;
+};
+
+/** The profile fields the daily path still needs. */
+export type DailyContext = {
+  householdSize: number | null;
+  foodWasteLevel: Level3 | null;
+  packagedFoodFreq: Freq3 | null;
+  hasSolar: boolean | null;
+};
+
+export type CategorySource = 'logged' | 'inferred';
+
+/**
+ * All five categories, always present.
+ *
+ * Deliberately a closed record rather than `Record<string, ...>`: the wire
+ * contract declares all five keys, and a partial object would typecheck here
+ * only to come out of the API missing a field the clients index into.
+ */
+export type CategorySources = {
+  transport: CategorySource;
+  food: CategorySource;
+  home_energy: CategorySource;
+  water: CategorySource;
+  waste: CategorySource;
+};
+
+export type DailyFootprint = {
+  transportKg: number;
+  foodKg: number;
+  homeEnergyKg: number;
+  waterKg: number;
+  wasteKg: number;
+  totalKg: number;
+  /** Per category, whether a real answer or the baseline produced the number. */
+  sources: CategorySources;
+  /** How many of the five questions were answered. The reduction bonus needs all 5. */
+  answeredCount: number;
+  clamped: boolean;
+  factorVersion: number;
+};
+
+/**
+ * Multiplier for the day's waste, from the actions taken.
+ *
+ * Starts at 1.00 (everything to landfill) and subtracts per action, floored
+ * at WASTE_MULTIPLIER_FLOOR. An unknown action contributes nothing rather
+ * than throwing: unlike a transport mode, where a missing factor silently
+ * zeroes a whole category, an unrecognised waste action can only fail to
+ * apply a discount the user might have earned — visible, and never an
+ * understated footprint.
+ */
+export function wasteMultiplierFromActions(actions: readonly string[]): number {
+  let multiplier = 1;
+  for (const action of actions) {
+    const delta = WASTE_ACTION_DELTA[action as keyof typeof WASTE_ACTION_DELTA];
+    if (delta) multiplier += delta.value;
+  }
+  return Math.max(WASTE_MULTIPLIER_FLOOR, multiplier);
+}
+
+/** Grid draw from a daily AC-hours bucket, per person, at the region's factor. */
+export function acGridKg(
+  bucket: AcHoursBucket,
+  gridKgPerKwh: number,
+  householdSize: number,
+  hasSolar: boolean,
+): number {
+  const hours = AC_HOURS_MIDPOINT[bucket].value;
+  const solar = hasSolar ? SOLAR_OFFSET_MULTIPLIER.value : 1;
+  return (hours * AC_KWH_PER_HOUR.value * gridKgPerKwh * solar) / Math.max(1, householdSize);
+}
+
+/**
+ * One day's footprint from the 5 answers, with the baseline filling the gaps.
+ *
+ * Pure, like the baseline: no database, no clock. The caller supplies the
+ * stored baseline and the region, so this is unit-testable without a fixture
+ * and cannot drift from what was persisted on the day.
+ *
+ * A skipped question is NOT zero. A number built from four inferences and one
+ * answer is marked as such in `sources`, because the Home screen shows that
+ * distinction — presenting it with the same confidence as a fully logged day
+ * would be a quiet lie.
+ */
+export function computeDailyFootprint(
+  answers: DailyAnswers,
+  baseline: StoredBaseline,
+  profile: DailyContext,
+  region?: { gridKgPerKwh: number } | null,
+): DailyFootprint {
+  const householdSize = Math.max(1, profile.householdSize ?? 1);
+  const gridKgPerKwh = region?.gridKgPerKwh ?? GRID_INDIA_AVG_KG_PER_KWH.value;
+  // --- Transport ---------------------------------------------------------
+  // Flights stay amortised from the baseline: the daily log never asks about
+  // them, so a logged day must not look cheaper simply by omitting them.
+  let transportKg: number;
+  const transportLogged = answers.trips !== undefined;
+  if (answers.trips === undefined) {
+    transportKg = baseline.baselineTransportKg;
+  } else {
+    const tripsKg = answers.trips.reduce(
+      (sum, t) => sum + t.km * commuteFactorKgPerKm(t.mode, null),
+      0,
+    );
+    transportKg = tripsKg + baseline.baselineFlightKg;
+  }
+
+  // --- Food --------------------------------------------------------------
+  const mealsAnswered =
+    answers.vegMeals !== undefined ||
+    answers.nonVegMeals !== undefined ||
+    answers.veganMeals !== undefined;
+  let foodKg: number;
+  if (!mealsAnswered) {
+    foodKg = baseline.baselineFoodKg;
+  } else {
+    const perMeal = (kgPerDay: number) => kgPerDay / MEALS_PER_DAY;
+    const mealsKg =
+      (answers.vegMeals ?? 0) * perMeal(DIET_KG_PER_DAY.vegetarian.value) +
+      (answers.veganMeals ?? 0) * perMeal(DIET_KG_PER_DAY.vegan.value) +
+      (answers.nonVegMeals ?? 0) * perMeal(DIET_KG_PER_DAY.non_veg_daily.value);
+    // The profile's waste multiplier and packaging adder still apply: neither
+    // is something the five daily questions ask about.
+    foodKg =
+      mealsKg * FOOD_WASTE_MULTIPLIER[profile.foodWasteLevel ?? 'low'].value +
+      PACKAGED_FOOD_ADD_KG[profile.packagedFoodFreq ?? 'rarely'].value;
+  }
+
+  // --- Home energy -------------------------------------------------------
+  // Cooking and the non-cooling grid base stay at baseline; only the cooling
+  // share is replaced by today's answer (§3.5).
+  let homeEnergyKg: number;
+  const homeEnergyLogged = answers.acHoursBucket !== undefined;
+  if (answers.acHoursBucket === undefined) {
+    homeEnergyKg = baseline.baselineHomeEnergyKg;
+  } else {
+    homeEnergyKg =
+      baseline.baselineCookKg +
+      baseline.baselineGridBaseKg +
+      acGridKg(answers.acHoursBucket, gridKgPerKwh, householdSize, profile.hasSolar ?? false);
+  }
+
+  // --- Water -------------------------------------------------------------
+  let waterKg: number;
+  const waterLogged = answers.bathChoice !== undefined;
+  if (answers.bathChoice === undefined) {
+    waterKg = baseline.baselineWaterKg;
+  } else {
+    // OTHER_HOUSEHOLD_LITRES_PER_DAY is added to the bath choice, as that
+    // factor's own definition states. §3.5's one-line formula omits it, but
+    // without it every logged day drops ~60% on water for no behavioural
+    // reason — a standing bias in the reduction bonus, and the factor would
+    // be dead code. Flagged for the Appendix A review.
+    const litres = BATH_LITRES[answers.bathChoice].value + OTHER_HOUSEHOLD_LITRES_PER_DAY.value;
+    waterKg = litres * WATER_KG_PER_LITRE.value;
+  }
+
+  // --- Waste -------------------------------------------------------------
+  let wasteKg: number;
+  const wasteLogged = answers.wasteActions !== undefined;
+  if (answers.wasteActions === undefined) {
+    wasteKg = baseline.baselineWasteKg;
+  } else {
+    wasteKg =
+      MSW_KG_PER_PERSON_DAY.value *
+      wasteMultiplierFromActions(answers.wasteActions) *
+      WASTE_KG_CO2_PER_KG.value;
+  }
+
+  const mark = (logged: boolean): CategorySource => (logged ? 'logged' : 'inferred');
+  const sources: CategorySources = {
+    transport: mark(transportLogged),
+    food: mark(mealsAnswered),
+    home_energy: mark(homeEnergyLogged),
+    water: mark(waterLogged),
+    waste: mark(wasteLogged),
+  };
+
+  const answeredCount = Object.values(sources).filter((s) => s === 'logged').length;
+  const { totalKg, clamped } = clampDailyKg(
+    transportKg + foodKg + homeEnergyKg + waterKg + wasteKg,
+  );
+
+  return {
+    transportKg,
+    foodKg,
+    homeEnergyKg,
+    waterKg,
+    wasteKg,
+    totalKg,
+    sources,
+    answeredCount,
+    clamped,
+    factorVersion: FACTOR_VERSION,
+  };
+}
+
+/** Percent below baseline, floored at 0. Never negative: a worse day is 0%, not -12%. */
+export function reductionPct(totalKg: number, baselineTotalKg: number): number {
+  if (baselineTotalKg <= 0) return 0;
+  const pct = ((baselineTotalKg - totalKg) / baselineTotalKg) * 100;
+  return pct > 0 ? Math.round(pct * 100) / 100 : 0;
 }

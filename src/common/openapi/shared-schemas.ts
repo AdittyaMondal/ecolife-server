@@ -39,6 +39,26 @@ export const userSummarySchema = z
   })
   .openapi('UserSummary');
 
+/**
+ * A URL the server will hand to other people's browsers.
+ *
+ * `z.string()` alone accepts `javascript:...` and `data:text/html,...`, and an
+ * avatar URL is rendered in every leaderboard row, participant list and public
+ * profile — so one account can reach every viewer. https-only also stops the
+ * cheaper version of the same trick: pointing it at an attacker-controlled
+ * host that logs the IP of everyone who loads the page.
+ *
+ * Once POST /uploads/presign exists this should narrow further, to URLs the
+ * app's own storage issued. Until there is a bucket to compare against,
+ * scheme and length are what can honestly be enforced.
+ */
+export const externalImageUrlSchema = z
+  .string()
+  .url()
+  .max(512)
+  .refine((u) => u.startsWith('https://'), { message: 'must be an https URL' })
+  .openapi({ example: 'https://cdn.ecolife.app/avatars/abc123.webp' });
+
 export const walletSchema = z
   .object({
     pointsTotal: z.number().int().openapi({ example: 1240 }),
