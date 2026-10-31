@@ -211,7 +211,10 @@ authRoutes.openapi(
     tags: ['auth'],
     summary: 'Revoke the current session family',
     security: secured,
-    responses: { 200: jsonOk(okMessageSchema, 'Signed out'), 501: errorResponses[501] },
+    responses: {
+      200: jsonOk(okMessageSchema, 'Signed out'),
+      401: errorResponses[401],
+    },
   }),
   async (c) => {
     await service.logout(presentedRefresh(c));
