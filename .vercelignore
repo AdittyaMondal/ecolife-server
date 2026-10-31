@@ -1,0 +1,34 @@
+# Nothing here is needed to serve a request, and a rewrite does NOT protect a
+# path that matches a real static file — so anything left in the deployment is
+# potentially fetchable. `outputDirectory` is `public/` (empty) for the same
+# reason; this file is the second layer, keeping non-runtime files out of the
+# upload entirely.
+
+# Secrets
+.env
+.env.*
+
+# Local dev server and anything only the scheduler or CLI needs
+src/main.ts
+src/database/migrate.ts
+src/database/migrations/
+src/database/seeds/
+src/jobs/
+src/ws/
+scripts/
+drizzle.config.ts
+
+# Tests and tooling
+test/
+**/*.spec.ts
+**/*.test.ts
+bunfig.toml
+biome.json
+
+# Docs
+docs/
+*.md
+
+# Build artefacts
+dist/
+.neon

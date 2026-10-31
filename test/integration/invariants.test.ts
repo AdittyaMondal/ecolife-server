@@ -31,6 +31,27 @@ let userId: number;
 let productId: number;
 
 beforeAll(async () => {
+  /**
+   * Sweep debris from a previous run that died before teardown.
+   *
+   * This file deliberately provokes constraint violations, so a failure
+   * mid-describe leaves probe rows behind — and because `orders.user_id` is
+   * ON DELETE RESTRICT, an abandoned order then blocks its own user's delete
+   * forever. That debris made the seed's global ledger reconciliation report a
+   * false mismatch. Self-healing here is cheaper than remembering to clean up
+   * by hand.
+   */
+  await db.execute(sql`
+    delete from orders where user_id in (
+      select id from users where email like 'probe-%@example.test' or email like 'Case-%'
+    )
+  `);
+  await db.execute(
+    sql`delete from users where email like 'probe-%@example.test' or email like 'Case-%'`,
+  );
+  await db.execute(sql`delete from products where slug like 'probe-%'`);
+  await db.execute(sql`delete from events where slug like 'probe-%'`);
+
   const [u] = await db
     .insert(users)
     .values({
