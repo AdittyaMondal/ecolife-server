@@ -3390,6 +3390,17 @@
           "joinedAt": {
             "type": "string",
             "example": "2026-11-01T09:00:00.000Z"
+          },
+          "pointsTotal": {
+            "type": "integer",
+            "example": 450
+          },
+          "baselineTotalKg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "example": 6.8
           }
         },
         "required": [
@@ -3433,6 +3444,48 @@
         },
         "required": [
           "left"
+        ]
+      },
+      "JoinOrganizationResult": {
+        "type": "object",
+        "properties": {
+          "joined": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "organization": {
+            "$ref": "#/components/schemas/Organization"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "member"
+            ],
+            "example": "owner"
+          }
+        },
+        "required": [
+          "joined",
+          "organization",
+          "role"
+        ]
+      },
+      "JoinOrganizationBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "acme-industries",
+            "description": "Organization code or slug"
+          }
+        },
+        "required": [
+          "code"
         ]
       },
       "ReviewOrganizationBody": {
@@ -9117,6 +9170,110 @@
           },
           "422": {
             "description": "Domain rule violation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/join": {
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Join an organization using its code or slug",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinOrganizationBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Joined successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/JoinOrganizationResult"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {

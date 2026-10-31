@@ -508,3 +508,55 @@ describe('admin review', () => {
     TIMEOUT,
   );
 });
+
+describe('joining by code and roster metrics', () => {
+  it(
+    'allows an onboarded user to join an approved organization via slug, reporting cumulative points and baseline',
+    async () => {
+      const owner = await createOnboardedUser();
+      const admin = await createOnboardedUser({ role: 'admin' });
+      const org = (await register(owner.token)).data;
+
+      // Cannot join while pending
+      const candidate = await createOnboardedUser();
+      const pendingJoinRes = await call('/organizations/join', {
+        method: 'POST',
+        headers: auth(candidate.token),
+        body: JSON.stringify({ code: org.slug }),
+      });
+      expect(pendingJoinRes.status).toBe(403);
+
+      // Approve organization
+      await call(`/admin/organizations/${org.id}/review`, {
+        method: 'POST',
+        headers: auth(admin.token),
+        body: JSON.stringify({ decision: 'approve' }),
+      });
+
+      // Now join with slug
+      const joinRes = await json(
+        await call('/organizations/join', {
+          method: 'POST',
+          headers: auth(candidate.token),
+          body: JSON.stringify({ code: org.slug }),
+        }),
+      );
+      expect(joinRes.data.joined).toBe(true);
+      expect(joinRes.data.organization.id).toBe(org.id);
+      expect(joinRes.data.role).toBe('member');
+
+      // Verify roster includes candidate with points and baseline
+      const rosterRes = await json(
+        await call(`/organizations/${org.id}/members`, {
+          headers: auth(candidate.token),
+        }),
+      );
+      expect(rosterRes.data.items.length).toBe(2);
+      const candidateInRoster = rosterRes.data.items.find((m: any) => m.user.id === candidate.userId);
+      expect(candidateInRoster).toBeDefined();
+      expect(typeof candidateInRoster.pointsTotal).toBe('number');
+      expect(typeof candidateInRoster.baselineTotalKg).toBe('number');
+    },
+    TIMEOUT,
+  );
+});

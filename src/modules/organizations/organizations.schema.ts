@@ -81,6 +81,8 @@ export const organizationMemberSchema = z
     user: userSummarySchema,
     role: orgMemberRoleSchema,
     joinedAt: z.string().openapi({ example: '2026-11-01T09:00:00.000Z' }),
+    pointsTotal: z.number().int().optional().openapi({ example: 450 }),
+    baselineTotalKg: z.number().nullable().optional().openapi({ example: 6.8 }),
   })
   .openapi('OrganizationMember');
 
@@ -90,6 +92,23 @@ export const organizationMemberListSchema = z
     items: z.array(organizationMemberSchema),
   })
   .openapi('OrganizationMemberList');
+
+export const joinOrganizationBodySchema = z
+  .object({
+    code: z.string().min(1).max(120).openapi({
+      example: 'acme-industries',
+      description: 'Organization code or slug',
+    }),
+  })
+  .openapi('JoinOrganizationBody');
+
+export const joinResultSchema = z
+  .object({
+    joined: z.literal(true),
+    organization: organizationSchema,
+    role: orgMemberRoleSchema,
+  })
+  .openapi('JoinOrganizationResult');
 
 export const addMemberBodySchema = z
   .object({
