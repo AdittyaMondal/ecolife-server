@@ -975,7 +975,10 @@
             "maxLength": 80
           },
           "timezone": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "Asia/Kolkata"
           },
           "avatarUrl": {
             "type": [
@@ -8727,8 +8730,8 @@
               }
             }
           },
-          "501": {
-            "description": "Not implemented yet",
+          "503": {
+            "description": "Uploads are not configured on this server",
             "content": {
               "application/json": {
                 "schema": {

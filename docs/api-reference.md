@@ -349,7 +349,7 @@ Recomputes the baseline forward only. Past daily_footprints rows carry their own
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `name` | string | no |  |
-| `timezone` | string | no |  |
+| `timezone` | string | no | e.g. `"Asia/Kolkata"` |
 | `avatarUrl` | string,null (uri) | no | e.g. `"https://cdn.ecolife.app/avatars/abc123.webp"` |
 | `answers` | [`OnboardingAnswers`](#onboardinganswers) | no |  |
 
@@ -1600,7 +1600,7 @@ Images never transit the API. The server verifies magic bytes and strips EXIF as
 | `400` | Validation failed | null |
 | `401` | Not authenticated | null |
 | `429` | Rate limited — see Retry-After | null |
-| `501` | Not implemented yet | null |
+| `503` | Uploads are not configured on this server | null |
 
 ---
 
@@ -2250,7 +2250,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `name` | string | no |  |
-| `timezone` | string | no |  |
+| `timezone` | string | no | e.g. `"Asia/Kolkata"` |
 | `avatarUrl` | string,null (uri) | no | e.g. `"https://cdn.ecolife.app/avatars/abc123.webp"` |
 | `answers` | [`OnboardingAnswers`](#onboardinganswers) | no |  |
 

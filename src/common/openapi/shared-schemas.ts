@@ -1,3 +1,4 @@
+import { isValidTimezone } from '@common/time.ts';
 import { z } from '@hono/zod-openapi';
 
 /**
@@ -58,6 +59,21 @@ export const externalImageUrlSchema = z
   .max(512)
   .refine((u) => u.startsWith('https://'), { message: 'must be an https URL' })
   .openapi({ example: 'https://cdn.ecolife.app/avatars/abc123.webp' });
+
+/**
+ * An IANA timezone name, checked against the runtime's own database.
+ *
+ * Unvalidated, this is not merely wrong data: `Intl.DateTimeFormat` THROWS on
+ * an unknown zone, and every "today" in the product goes through it. One
+ * PATCH of `"nonsense"` would 500 every subsequent /track call for that
+ * account until a DBA fixed the row.
+ */
+export const timezoneSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine(isValidTimezone, { message: 'must be an IANA timezone name, e.g. Asia/Kolkata' })
+  .openapi({ example: 'Asia/Kolkata' });
 
 export const walletSchema = z
   .object({
