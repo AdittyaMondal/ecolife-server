@@ -7,8 +7,8 @@ import {
 } from '@common/carbon/calculate.ts';
 import { DomainError } from '@common/errors/domain-error.ts';
 import {
-  assertCanEarn,
   award,
+  canEarn,
   coinsFor,
   type Executor,
   REWARDS,
@@ -235,7 +235,13 @@ export type SubmitBody = { clientLogId: string; logDate: string; answers: TrackA
 export async function submit(userId: number, body: SubmitBody) {
   const { user, profile, region } = await loadContext(userId);
   assertLoggableDate(user, body.logDate);
-  await assertCanEarn(db, userId);
+  /**
+   * Verification gates the REWARD, not the log (PRD-v2 §4.4, and
+   * docs/error-codes.md says so in as many words). This used to throw,
+   * which stopped an unverified user from recording their day at all —
+   * the core action of the product, refused over a bonus.
+   */
+  const earns = await canEarn(db, userId);
 
   const answers = toDailyAnswers(body.answers);
   const baseline = storedBaseline(profile);
@@ -282,7 +288,12 @@ export async function submit(userId: number, body: SubmitBody) {
     });
 
     const streak = await updateStreak(tx, userId, user, body.logDate);
-    const reward = await grantForLog(tx, userId, log.id, computed, footprint.reductionPct, streak);
+    const reward = earns
+      ? await grantForLog(tx, userId, log.id, computed, footprint.reductionPct, streak)
+      : {
+          grant: { pointsDelta: 0, coinsDelta: 0, reasons: [] },
+          wallet: { pointsTotal: user.pointsTotal, coinsBalance: user.coinsBalance },
+        };
 
     return {
       logId: log.id,

@@ -205,16 +205,60 @@ describe('onboarding', () => {
   );
 
   it(
-    'will not let an unverified account earn',
+    'lets an unverified account finish onboarding, but withholds the reward',
     async () => {
-      const { token } = await signUp({ verified: false });
+      const { token, userId } = await signUp({ verified: false });
       await answerAll(token);
       const res = await call('/profile/onboarding/complete', {
         method: 'POST',
         headers: auth(token),
       });
-      expect(res.status).toBe(403);
-      expect((await json(res)).error.code).toBe('POINTS_003');
+
+      // This used to 403. Verification gates EARNING, not the product
+      // (PRD-v2 §4.4) — and because the baseline is written by this very
+      // call, throwing here left an unverified account with no baseline,
+      // so it could never log a day or open Home either. The gate took the
+      // whole product down with the bonus.
+      expect(res.status).toBe(200);
+      const body = await json(res);
+      expect(body.data.baseline.totalKg).toBeGreaterThan(0);
+      expect(body.data.pointsAwarded).toBe(0);
+      expect(body.data.wallet.pointsTotal).toBe(0);
+
+      const [grants] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(rewardTransactions)
+        .where(eq(rewardTransactions.userId, userId));
+      expect(grants?.n).toBe(0);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'pays the withheld onboarding reward the moment the email is verified',
+    async () => {
+      const { token, userId } = await signUp({ verified: false });
+      await answerAll(token);
+      await call('/profile/onboarding/complete', { method: 'POST', headers: auth(token) });
+
+      // Verifying is the only action taken here. Nobody re-triggers
+      // completion, because nobody would guess they had to.
+      await db.update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, userId));
+      await call('/profile/onboarding/complete', { method: 'POST', headers: auth(token) });
+
+      const me = await json(await call('/auth/me', { headers: auth(token) }));
+      expect(me.data.wallet.pointsTotal).toBe(100);
+      expect(me.data.wallet.coinsBalance).toBe(50);
+
+      // And never twice: onboarding:{userId} is one grant for all time.
+      await call('/profile/onboarding/complete', { method: 'POST', headers: auth(token) });
+      const [grants] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(rewardTransactions)
+        .where(
+          and(eq(rewardTransactions.userId, userId), eq(rewardTransactions.source, 'onboarding')),
+        );
+      expect(grants?.n).toBe(1);
     },
     TIMEOUT,
   );

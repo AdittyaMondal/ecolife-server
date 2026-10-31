@@ -8,7 +8,10 @@ import {
 } from '@common/auth/session.ts';
 import { hashToken, issueAccessToken, mintRefreshToken } from '@common/auth/tokens.ts';
 import { DomainError } from '@common/errors/domain-error.ts';
+import { award, REWARDS } from '@common/rewards/rewards.ts';
 import { env } from '@config/env.ts';
+import { db } from '@database/client.ts';
+import * as profileRepo from '@modules/profile/profile.repository.ts';
 import * as repo from './auth.repository.ts';
 
 /**
@@ -181,6 +184,38 @@ export async function verifyEmail(token: string) {
   const row = await repo.consumeEmailToken(await hashToken(token), 'verify');
   if (!row) throw new DomainError('AUTH_007', 'That link is invalid or has expired.', 422);
   await repo.markEmailVerified(row.userId);
+  await grantWithheldOnboardingReward(row.userId);
+}
+
+/**
+ * Pays the onboarding reward that verification was holding back.
+ *
+ * Someone who answers the fifteen questions before clicking the link gets
+ * their baseline immediately but not the 100 points, so without this they
+ * would have to somehow re-trigger completion to collect — a step nobody
+ * would guess at. Keyed `onboarding:{userId}`, so this is a no-op for a
+ * user who was already verified when they finished, and for a user who
+ * verifies twice.
+ *
+ * Failure here must not fail the verification itself: the account IS
+ * verified by this point, and the same key means the grant can be made
+ * again later without double-paying.
+ */
+async function grantWithheldOnboardingReward(userId: number) {
+  try {
+    const profile = await profileRepo.findProfile(userId);
+    if (!profile || profile.baselineTotalKg === null) return;
+    await award(db, {
+      userId,
+      pointsDelta: REWARDS.onboarding.points,
+      coinsDelta: REWARDS.onboarding.coins,
+      source: 'onboarding',
+      sourceId: `onboarding:${userId}`,
+      note: 'Completed onboarding',
+    });
+  } catch (error) {
+    console.error(`[auth] could not grant onboarding reward to user ${userId}`, error);
+  }
 }
 
 export async function resendVerification(userId: number) {

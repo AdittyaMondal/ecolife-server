@@ -233,6 +233,41 @@ describe('POST /track/logs', () => {
   }, 60_000);
 
   it(
+    'lets an unverified account log the day, and pays it nothing',
+    async () => {
+      const fx = await createOnboardedUser({ emailVerifiedAt: null });
+      const res = await call('/track/logs', {
+        method: 'POST',
+        headers: auth(fx.token),
+        body: JSON.stringify({
+          clientLogId: crypto.randomUUID(),
+          logDate: localDate(TZ),
+          answers: GREEN_DAY,
+        }),
+      });
+
+      // Logging a day is the core action of the product. Refusing it over a
+      // bonus is the opposite of what docs/error-codes.md says POINTS_003
+      // means: verification gates earning, not browsing or logging.
+      expect(res.status).toBe(200);
+      const body = await json(res);
+      expect(body.data.breakdown.totalKg).toBeGreaterThan(0);
+      expect(body.data.reward.pointsDelta).toBe(0);
+      expect(body.data.reward.reasons).toEqual([]);
+      expect(body.data.wallet.pointsTotal).toBe(0);
+      // The streak still counts — showing up is showing up.
+      expect(body.data.streak.current).toBe(1);
+
+      const [grants] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(rewardTransactions)
+        .where(eq(rewardTransactions.userId, fx.userId));
+      expect(grants?.n).toBe(0);
+    },
+    TIMEOUT,
+  );
+
+  it(
     'refuses a date outside today or yesterday',
     async () => {
       const { token } = await onboarded();

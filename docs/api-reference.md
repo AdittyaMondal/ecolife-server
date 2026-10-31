@@ -1085,7 +1085,7 @@ One transaction: decrement stock, insert the order with price snapshots, debit c
 
 | Name | In | Required | Type | Notes |
 |---|---|---|---|---|
-| `slug` | path | yes | string | e.g. `"beach-cleanup-versova"` |
+| `slug` | path | yes | string | e.g. `"tulsi-sapling"` |
 
 **Responses**
 
@@ -1448,7 +1448,7 @@ Seven ordered checks (PRD-v2 §6.6.4):
 
 | Name | In | Required | Type | Notes |
 |---|---|---|---|---|
-| `slug` | path | yes | string | e.g. `"beach-cleanup-versova"` |
+| `slug` | path | yes | string | e.g. `"versova-beach-cleanup"` |
 
 **Responses**
 

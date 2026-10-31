@@ -2,7 +2,7 @@ import { revokeAllSessions } from '@common/auth/session.ts';
 import { type BaselineProfile, computeDailyBaseline } from '@common/carbon/calculate.ts';
 import { DomainError } from '@common/errors/domain-error.ts';
 import { decodeIdCursor, type Page, toPage } from '@common/pagination.ts';
-import { assertCanEarn, award, REWARDS, type RewardSource } from '@common/rewards/rewards.ts';
+import { award, canEarn, REWARDS, type RewardSource } from '@common/rewards/rewards.ts';
 import { db } from '@database/client.ts';
 import type { z } from '@hono/zod-openapi';
 import * as reference from '@modules/reference/reference.repository.ts';
@@ -233,10 +233,17 @@ export async function completeOnboarding(userId: number) {
   const region = profile.regionCode ? await reference.findRegion(profile.regionCode) : null;
   const baseline = computeDailyBaseline(toBaselineProfile(profile), region);
 
-  // Earning requires a verified email (PRD-v2 §4.4). Checked before the
-  // transaction so a blocked grant does not also roll back the baseline the
-  // user is entitled to see.
-  await assertCanEarn(db, userId);
+  /**
+   * Verification gates the REWARD, not the baseline (PRD-v2 §4.4).
+   *
+   * This used to throw, which meant an unverified account could never
+   * finish onboarding, never get a baseline, and therefore never log a day
+   * or open Home — the gate took the entire product with it. The baseline
+   * is something the user is entitled to see the moment they answer the
+   * fifteen questions; only the 100 points wait for verification, and
+   * `verifyEmail` grants them the moment it arrives.
+   */
+  const earns = await canEarn(db, userId);
 
   const result = await db.transaction(async (tx) => {
     await repo.updateProfile(
@@ -268,6 +275,15 @@ export async function completeOnboarding(userId: number) {
       },
       tx,
     );
+
+    if (!earns) {
+      const user = await repo.findUser(userId);
+      return {
+        awarded: false,
+        pointsTotal: user?.pointsTotal ?? 0,
+        coinsBalance: user?.coinsBalance ?? 0,
+      };
+    }
 
     // `onboarding:{userId}` — one grant per user, for all time.
     return award(tx, {
