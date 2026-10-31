@@ -1,3 +1,4 @@
+import type { JsonValue } from '@common/interceptors/response-envelope.ts';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 
 /**
@@ -10,7 +11,7 @@ export class DomainError extends Error {
     readonly code: string,
     message: string,
     readonly status: ContentfulStatusCode = 400,
-    readonly details: Record<string, unknown> = {},
+    readonly details: Record<string, JsonValue> = {},
   ) {
     super(message);
     this.name = 'DomainError';

@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 /**
  * Zod schema over process.env. The server refuses to boot on invalid input
- * (PRD Appendix A: "A missing required variable is a startup failure, never a
- * silent fallback").
+ * (PRD-v2 Appendix B: "A missing required variable is a startup failure, never
+ * a silent fallback").
  *
  * Secrets for modules that do not exist yet are optional here and become
  * required as those modules land.
@@ -21,29 +21,29 @@ const envSchema = z.object({
   /** Pooled (-pooler) endpoint — all application query traffic. */
   DATABASE_URL_POOLED: postgresUrl.optional(),
 
-  SESSION_COOKIE_NAME: z.string().min(1).default('ecolife_session'),
-  SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  /** Access token signing key. Required before the auth module lands. */
+  JWT_SECRET: z.string().min(32).optional(),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  SESSION_COOKIE_NAME: z.string().min(1).default('ecolife_refresh'),
+
+  /** Web origin, for CORS. The mobile client is not browser-origin-bound. */
   APP_ORIGIN: z.string().min(1),
+  /** Deep-link scheme used by event passes: ecolife://pass/{code} */
+  MOBILE_SCHEME: z.string().min(1).default('ecolife'),
+
+  // --- Economy (PRD-v2 §4.3). Server-authoritative; clients only preview. ---
+  COINS_PER_RUPEE: z.coerce.number().int().positive().default(10),
+  MAX_DISCOUNT_PCT: z.coerce.number().int().min(1).max(100).default(20),
 
   // --- Not yet wired; required once their module lands ---
-  GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
-  GEMINI_DAILY_TOKEN_BUDGET: z.coerce.number().int().positive().optional(),
   S3_ENDPOINT: z.string().optional(),
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
-  WHATSAPP_API_URL: z.string().optional(),
-  WHATSAPP_INSTANCE_ID: z.string().optional(),
-  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
-  MERCHANT_NOTIFY_NUMBER: z.string().optional(),
-  VAPID_PUBLIC_KEY: z.string().optional(),
-  VAPID_PRIVATE_KEY: z.string().optional(),
-  VAPID_SUBJECT: z.string().optional(),
-  AGENTHUB_URL: z.string().optional(),
-  AGENTHUB_KEY: z.string().optional(),
-  AGENTHUB_SIGNING_KEY: z.string().optional(),
-  ELECTRICITY_MAPS_TOKEN: z.string().optional(),
+  SMTP_URL: z.string().optional(),
+  MAIL_FROM: z.string().default('EcoLife <no-reply@ecolife.app>'),
+  EXPO_ACCESS_TOKEN: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
 });
 

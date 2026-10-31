@@ -6,59 +6,67 @@ Instructions for AI agents working in this repository. Read this before writing 
 
 ## 1. What this repo is
 
-`ecolife-server` is the **API and domain layer** for EcoLife, a personal carbon-footprint
-tracker with social gamification. It owns **data, domain rules, auth, jobs and MCP**. It
-renders nothing.
+`ecolife-server` is the **API and domain layer** for EcoLife, a carbon-footprint tracker with
+daily logging, goals, a points/coins economy, a marketplace and community events. It owns
+**data, domain rules, auth and jobs**. It renders nothing.
 
-**This is not a monorepo.** There are two independent repositories:
+**This is not a monorepo.** There are three independent repositories, one per developer:
 
-| Repo | Owns | Runtime | Port |
-|---|---|---|---|
-| `ecolife-server` (this one) | data, domain rules, auth, jobs, MCP | Bun | 4000 |
-| `ecolife-app` | rendering, PWA, UX | Node 22 / Next.js 16 | 3000 |
+| Repo | Owns | Runtime | Port | Owner |
+|---|---|---|---|---|
+| `ecolife-server` (this one) | data, domain rules, auth, jobs | Bun + Hono | 4000 | Adittya |
+| `ecolife-web` | web rendering, admin console | Next.js 16 | 3000 | Yusuf |
+| `ecolife-mobile` | the mobile app, QR scanning, offline | Expo 58 | — | Jenin |
 
-`ecolife-app` does not exist yet. When it does, it talks to this server through
-`backendFetch()` and never queries Postgres directly.
+Both clients talk to this server over HTTP and never query Postgres directly.
 
 ### The PRD is the source of truth
 
-`../PRD.md` (**outside this repo**, in the parent planning folder) is the authoritative spec —
-~2800 lines covering the legacy system as-built, the target schema, the API surface, the
-carbon formulas and the phasing. **When this file and the PRD disagree, the PRD wins.**
+`../PRD-v2.md` (**outside this repo**, in the parent planning folder) is the authoritative
+spec. `../SPRINT-PLAN.md` is the execution plan and ticket board.
+**When this file and PRD-v2 disagree, PRD-v2 wins** — except where this file records something
+already proven in code (§6), which wins over both.
 
-Markers used throughout the PRD:
+> `../PRD.md` is **v1 and superseded**. It specified a Laravel→monorepo migration with an
+> AgentHub capability marketplace. v2 is a greenfield build with no MCP, no AgentHub, no social
+> feed and no AI coach. Do not implement from v1.
 
-- `[AS-BUILT]` — current behaviour of the legacy Laravel app. Parity target.
-- `[CHANGE]` — deliberate divergence from legacy.
-- `[NEW]` — does not exist today.
+Markers used in PRD-v2:
 
-Before implementing a module, read its PRD section **and** its row in Appendix B (legacy
-source map), which names the Laravel file the behaviour came from.
+- `[NEW]` — no v1 equivalent.
+- `[CHANGE]` — deliberate divergence from v1.
+- `[DEFERRED]` — explicitly out of scope. The 2D farm game is the big one: **do not build any
+  part of it.** PRD-v2 §12 names the only three hooks v2 owes it.
+- `[LESSON]` — a decision taken *because* v1's audit found the opposite approach broken. These
+  are not optional and not up for redesign.
 
 ---
 
 ## 2. Current state — read this before assuming something exists
 
-> **The data model is being redesigned.** The schema is deliberately empty and the database
-> holds no tables. Do not resurrect the old identity tables from git history — wait for the
-> new core.
+> **Sprint 0 is complete: the contract exists, the behaviour does not.**
+> All 55 endpoints are declared, typed and documented. Every handler throws `GEN_501`.
 
 What exists:
 
 - Env config, zod-validated, fails fast at boot
 - Drizzle client on the **pooled** endpoint; migrator on the **direct** endpoint
 - An empty schema barrel at `src/database/schema/index.ts`
-- Hono app with request-id, logging, secure headers, CORS
+- `OpenAPIHono` app with request-id, logging, secure headers, CORS
 - Response envelope, typed `DomainError`, error and not-found filters
-- `health` module — liveness + readiness
+- **The full API contract** — 9 modules, 55 paths, zod request/response schemas with realistic
+  examples, generated to a committed `openapi.json`
+- `docs/error-codes.md` — the code registry both clients branch on
+- `health` module, fully implemented
 - Tests covering the connection layer and the envelope
 
-**What does not exist:** any table, any migration, auth, guards, the carbon engine, every
-domain module, jobs, WebSocket, AgentHub, seeds. Directories for them are scaffolded and
-empty. Do not claim otherwise, and do not import from them.
+**What does not exist:** any table, any migration, auth, guards, the carbon engine, any domain
+service or repository, jobs, WebSocket, seeds. Every route outside `health` is a declared
+contract backed by `notImplemented()`. Do not claim otherwise, and do not import from an empty
+directory.
 
-The database is live and reachable, but has **zero tables**. `pnpm migration:generate` will
-report nothing to do until the new schema is written.
+The database is live and reachable but has **zero tables**. `pnpm migration:generate` reports
+nothing to do until the schema in PRD-v2 §7 is written (ticket SRV-04).
 
 ---
 
@@ -76,6 +84,9 @@ report nothing to do until the new schema is written.
 | `pnpm migration:generate` | Diff schema → new SQL migration |
 | `pnpm migration:apply` | Apply pending migrations (direct connection) |
 | `pnpm db:studio` | Drizzle Studio |
+| `pnpm gen:openapi` | Regenerate `openapi.json` from the route definitions |
+| `pnpm gen:openapi:check` | Fail if `openapi.json` is stale (CI) |
+| `pnpm mock` | Prism mock of `openapi.json` on :4010 — what the clients build against |
 
 `npm run <script>` also works; dependencies are installed with **pnpm**.
 
@@ -91,9 +102,28 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## 4. Non-negotiable rules
 
+### 4.0 The contract is the product of this repo
+
+Two developers are building against `openapi.json`. It is a **committed artifact**, not a
+by-product.
+
+- Declare every route with `createRoute()` on a router from `createModule()`. Never
+  `new OpenAPIHono()` directly — the factory installs the `defaultHook` that routes zod
+  validation failures through the envelope.
+- Give every response field a realistic `.openapi({ example })`. Those examples **are** the
+  mock the clients develop against, so a lazy example is a worse bug than a lazy handler.
+- Run `pnpm gen:openapi` and **commit the result in the same PR** as any schema change.
+- Announce it: `CONTRACT CHANGE: <endpoint> — <what moved>`. Both clients re-run their
+  `gen:api` and get compile errors at the affected call sites.
+- Declare only the status codes a route can actually produce. A documented 409 on an endpoint
+  that cannot conflict is a lie the clients write dead branches against.
+- **Every route currently declares `501`, because every handler currently throws it. Remove
+  that `501` from a route the moment you implement it**, and regenerate. Leaving it behind is
+  exactly the dead branch the previous bullet warns about — it just happens to be true today.
+
 ### 4.1 Every response uses the envelope
 
-PRD §9.5. Never return a bare object.
+PRD-v2 §8. Never return a bare object.
 
 ```ts
 // success
@@ -102,9 +132,15 @@ PRD §9.5. Never return a bare object.
 { "status": false, "data": null, "error": { "code": "CARBON_014", "message": "…", "details": {} } }
 ```
 
-Use `ok()` / `fail()` from `@common/interceptors/response-envelope.ts`. To fail from inside a
-service, `throw new DomainError(code, message, status, details)` — the error filter maps it.
-Error codes are `DOMAIN_NNN`.
+Use `ok()` from `@common/interceptors/response-envelope.ts` for the success path. **To fail,
+always `throw new DomainError(code, message, status, details)`** — the error filter maps it.
+
+Do not *return* `fail()` from a route handler. A handler that returns both the success and the
+failure envelope widens its return type into a union, and zod-openapi cannot match that
+against the route's declared responses — it will not typecheck. `fail()` exists for the error
+filter and the validation hook, not for handlers.
+
+Error codes are `DOMAIN_NNN` and every one is registered in `docs/error-codes.md`.
 
 **Never leak an internal error message or stack to the client.** Anything that is not a
 `DomainError` becomes a generic `INTERNAL_001` 500, and the real error is logged server-side.
@@ -133,13 +169,17 @@ connection layer and that test fails, the test is probably right.
 - Soft-delete (`deletedAt`) only where a UI needs it.
 - Migrations are **generated, committed and forward-only**. Never hand-edit a generated SQL
   file, and never run ad-hoc DDL against the database.
-- `enums.ts` is mirrored into `ecolife-app` by codegen (PRD §9.4). Keep declarations literal
-  and one value per line so the parser can read them.
-- Cite the PRD section in a comment at the top of each table file.
+- `enums.ts` is mirrored into both client repos by codegen (PRD-v2 §9.4). Keep declarations
+  literal and one value per line so the parser can read them.
+- Cite the PRD-v2 section in a comment at the top of each table file.
+- **Put invariants in the database, not only in a service.** PRD-v2 relies on this: a partial
+  unique index for one-open-goal-per-user, a unique `(user_id, source, source_id)` on the
+  reward ledger for idempotent awards, a check constraint for the 20% discount cap. These are
+  `[LESSON]` items — v1's equivalent bugs were all "the service was supposed to check".
 
 ### 4.4 Module file convention
 
-PRD §9.2. One concern per file, the same five names in every module:
+PRD-v2 §9.2. One concern per file, the same five names in every module:
 
 | File | Responsibility |
 |---|---|
@@ -172,9 +212,17 @@ module lands.
 
 ### 4.7 Auth, when you build it
 
-PRD §9.6 mandates: `Bun.password.hash` (argon2id) + an opaque 32-random-byte base64url token
-in an httpOnly, `SameSite=Lax`, Secure cookie, backed by a `sessions` table. ~80 lines, zero
-dependencies. A `role` column replaces the legacy shared admin PIN — do not reintroduce a PIN.
+PRD-v2 §6.1. Two clients with genuinely different needs, so the server issues both:
+
+- Password hashing: `Bun.password.hash(pw, { algorithm: 'argon2id' })`.
+- **Access token**: JWT, 15 minutes, returned in the body to both clients.
+- **Refresh token**: opaque 32 random bytes, 30 days, **stored hashed** in `sessions`, rotated
+  on every use, with reuse detection — a replayed token revokes the whole family.
+- Web keeps the refresh token in an httpOnly `SameSite=Lax` Secure cookie set by a Next route
+  handler; mobile keeps it in `expo-secure-store`. `POST /auth/refresh` accepts it from the
+  cookie **or** the body, so one endpoint serves both.
+- A `role` column gates admin. **Never a shared PIN** — that was v1's worst defect.
+- Email verification is required before any reward is earned (PRD-v2 §4.4), not to browse.
 
 ---
 
