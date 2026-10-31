@@ -1,0 +1,6 @@
+# pnpm 12 reads settings from here, not from package.json's "pnpm" field.
+#
+# esbuild (a transitive dep of drizzle-kit) has a postinstall that resolves its
+# platform binary. Allowed so `pnpm install` exits 0 in CI.
+allowBuilds:
+  esbuild: true
