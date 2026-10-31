@@ -55,6 +55,7 @@ into the client repos' copy of this file.
 | `GOAL_001` | 409 | An active goal already exists. One per user, enforced by a partial unique index. |
 | `GOAL_002` | 422 | `endDate` must be after `startDate`. |
 | `GOAL_003` | 422 | `reducePercent` required for `reduce_percent`; `capKgPerDay` for `absolute_cap`. |
+| `GOAL_004` | 404 | No goal with that id **for this user**. A goal belonging to someone else returns this same 404, never 403.
 
 ## Events
 

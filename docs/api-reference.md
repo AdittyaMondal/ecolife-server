@@ -492,7 +492,6 @@ Budget: under 250 ms p95. One round trip, one payload, no client-side fan-out.
 | `200` | Home payload | [`Home`](#home) |
 | `401` | Not authenticated | null |
 | `403` | Not authorised | null |
-| `501` | Not implemented yet | null |
 
 ---
 
@@ -621,7 +620,6 @@ Goals are never deleted — they settle to achieved or missed and stay visible.
 |---|---|---|
 | `200` | Goals | [`GoalsList`](#goalslist) |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `POST` `/api/v1/goals`
 
@@ -650,7 +648,6 @@ Goals are never deleted — they settle to achieved or missed and stay visible.
 | `401` | Not authenticated | null |
 | `409` | Conflict | null |
 | `422` | Domain rule violation | null |
-| `501` | Not implemented yet | null |
 
 ### `DELETE` `/api/v1/goals/{id}`
 
@@ -673,7 +670,6 @@ Sets status to 'cancelled'. The row is kept.
 | `200` | Cancelled | [`Goal`](#goal) |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ### `PATCH` `/api/v1/goals/{id}`
 
@@ -707,7 +703,6 @@ Recomputes and re-freezes the target.
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
 | `422` | Domain rule violation | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/goals/{id}/progress`
 
@@ -728,7 +723,6 @@ Recomputes and re-freezes the target.
 | `200` | Progress | [`GoalProgress`](#goalprogress) |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
-| `501` | Not implemented yet | null |
 
 ---
 
@@ -759,8 +753,8 @@ Recomputes and re-freezes the target.
 | Code | Meaning | `data` |
 |---|---|---|
 | `200` | Ranked page | object |
+| `400` | Validation failed | null |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ### `GET` `/api/v1/leaderboard/me`
 
@@ -774,7 +768,6 @@ Recomputes and re-freezes the target.
 |---|---|---|
 | `200` | Own rank | [`MyRank`](#myrank) |
 | `401` | Not authenticated | null |
-| `501` | Not implemented yet | null |
 
 ---
 
