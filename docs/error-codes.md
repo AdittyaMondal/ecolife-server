@@ -83,6 +83,7 @@ into the client repos' copy of this file.
 |---|---|---|
 | `POINTS_001` | 422 | Coin balance would go negative. |
 | `POINTS_002` | 409 | Reward already granted for this `(source, sourceId)`. Treated as a no-op, not an error. |
+| `POINTS_003` | 403 | Email not verified. Verification gates **earning**, not browsing or logging (PRD-v2 §4.4). |
 
 ## Organizations
 
