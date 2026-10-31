@@ -1,3 +1,4 @@
+import { nullable } from '@common/openapi/envelope.ts';
 import {
   rewardGrantSchema,
   userSummarySchema,
@@ -54,7 +55,7 @@ export const eventSchema = z
         isHost: z.boolean().openapi({ example: false }),
         isCoHost: z.boolean().openapi({ example: false }),
         registered: z.boolean().openapi({ example: true }),
-        passStatus: passStatusSchema.nullable(),
+        passStatus: nullable(passStatusSchema),
       })
       .openapi('EventViewerState'),
   })
@@ -180,7 +181,7 @@ export const scanResultSchema = z
     checkedInAt: z.string().openapi({ example: '2026-11-02T02:12:00.000Z' }),
     checkedInCount: z.number().int().openapi({ example: 13 }),
     capacity: z.number().int().openapi({ example: 100 }),
-    attendeeReward: rewardGrantSchema.nullable().openapi({
+    attendeeReward: nullable(rewardGrantSchema).openapi({
       description: 'Null when already checked in — the reward was granted on the first scan',
     }),
   })

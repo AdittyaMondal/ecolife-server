@@ -1,3 +1,4 @@
+import { nullable } from '@common/openapi/envelope.ts';
 import {
   breakdownSchema,
   categorySourceSchema,
@@ -88,8 +89,8 @@ export const homeSchema = z
     streak: streakSchema,
     week: weekSchema,
     breakdown30d: breakdownSchema,
-    activeGoal: activeGoalSummarySchema.nullable(),
+    activeGoal: nullable(activeGoalSummarySchema),
     leaderboard: leaderboardPeekSchema,
-    nextEvent: nextEventSchema.nullable(),
+    nextEvent: nullable(nextEventSchema),
   })
   .openapi('Home');

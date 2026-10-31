@@ -1,3 +1,4 @@
+import { nullable } from '@common/openapi/envelope.ts';
 import { dateString } from '@common/openapi/params.ts';
 import { rewardGrantSchema } from '@common/openapi/shared-schemas.ts';
 import { z } from '@hono/zod-openapi';
@@ -72,9 +73,9 @@ export const goalProgressSchema = z
   .openapi('GoalProgress');
 
 export const goalsListSchema = z
-  .object({ active: goalSchema.nullable(), past: z.array(goalSchema) })
+  .object({ active: nullable(goalSchema), past: z.array(goalSchema) })
   .openapi('GoalsList');
 
 export const goalSettledSchema = z
-  .object({ goal: goalSchema, reward: rewardGrantSchema.nullable() })
+  .object({ goal: goalSchema, reward: nullable(rewardGrantSchema) })
   .openapi('GoalSettled');

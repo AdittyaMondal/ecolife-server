@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { db, pool } from '@database/client.ts';
+import { db } from '@database/client.ts';
 import {
   dailyFootprints,
   dailyLogs,
@@ -39,7 +39,8 @@ beforeAll(async () => {
       passwordHash: 'not-a-real-hash',
     })
     .returning();
-  userId = u!.id;
+  if (!u) throw new Error('probe user insert returned no row');
+  userId = u.id;
 
   const [p] = await db
     .insert(products)
@@ -51,7 +52,8 @@ beforeAll(async () => {
       stock: 1,
     })
     .returning();
-  productId = p!.id;
+  if (!p) throw new Error('probe product insert returned no row');
+  productId = p.id;
 }, TIMEOUT);
 
 afterAll(async () => {
@@ -339,7 +341,8 @@ describe('event capacity', () => {
           registeredCount: 2,
         })
         .returning();
-      const eventId = e!.id;
+      if (!e) throw new Error('probe event insert returned no row');
+      const eventId = e.id;
 
       let overCapacity: unknown;
       try {
