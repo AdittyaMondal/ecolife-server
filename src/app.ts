@@ -17,6 +17,7 @@ import {
   uploadRoutes,
 } from '@modules/reference/reference.routes.ts';
 import { trackRoutes } from '@modules/track/track.routes.ts';
+import { getCookie, setCookie } from 'hono/cookie';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { requestId } from 'hono/request-id';
@@ -26,7 +27,18 @@ export const app = createModule();
 
 // Global middleware chain (PRD §9.2: request-id · logging · headers · cors).
 app.use('*', requestId());
-app.use('*', logger());
+/**
+ * Hono's logger prints the path WITH its query string, so a `?token=…` docs
+ * link would be written to stdout verbatim and then shipped wherever logs go.
+ * Redact it at the sink: the only thing lost is a value nobody should be
+ * reading out of a log line.
+ */
+app.use(
+  '*',
+  logger((message: string, ...rest: string[]) =>
+    console.log(message.replace(/([?&]token=)[^\s&]+/gi, '$1<redacted>'), ...rest),
+  ),
+);
 app.use('*', secureHeaders());
 app.use('/api/*', cors({ origin: env.APP_ORIGIN, credentials: true }));
 
@@ -62,6 +74,11 @@ app.doc31('/openapi.json', {
       '`{ status, data, error }`. Clients branch on `error.code`, never on `error.message`.',
   },
   servers: [
+    // The deployment first when it is configured, so the "try it" button on
+    // /docs calls the real host rather than the reader's own machine.
+    ...(env.PUBLIC_API_URL
+      ? [{ url: `${env.PUBLIC_API_URL.replace(/\/$/, '')}/api/v1`, description: 'deployment' }]
+      : []),
     { url: 'http://localhost:4000/api/v1', description: 'local server' },
     {
       url: 'http://localhost:4010/api/v1',
@@ -105,17 +122,41 @@ app.doc31('/openapi.json', {
  * the hash if the version changes:
  *   curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
  */
+const DOCS_COOKIE = 'ecolife_docs';
+
+/** Constant-time compare, so the token cannot be guessed a character at a time. */
+function tokenMatches(given: string, expected: string): boolean {
+  return (
+    given.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected))
+  );
+}
+
 if (env.NODE_ENV !== 'production' || env.ENABLE_API_DOCS) {
   app.get('/docs', (c) => {
-    // When a token is configured the page is not public. Compared with a
-    // constant-time check so the token cannot be guessed a character at a time.
-    if (env.API_DOCS_TOKEN) {
-      const given = c.req.query('token') ?? '';
-      const expected = env.API_DOCS_TOKEN;
-      const ok =
-        given.length === expected.length &&
-        crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
-      if (!ok) throw new DomainError('DOCS_001', 'Not found.', 404);
+    // When a token is configured the page is not public.
+    const expected = env.API_DOCS_TOKEN;
+    if (expected) {
+      const bearer = c.req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+      if (!tokenMatches(bearer ?? getCookie(c, DOCS_COOKIE) ?? '', expected)) {
+        // A `?token=…` link is the only practical way to hand this to a
+        // teammate, but a query string is written to browser history, sent on
+        // in the Referer header, and recorded in full by every reverse proxy
+        // and CDN access log in front of this server. So it is accepted once
+        // and immediately moved into an httpOnly cookie, and the reader is
+        // bounced to a clean URL that carries no secret.
+        if (!tokenMatches(c.req.query('token') ?? '', expected)) {
+          throw new DomainError('DOCS_001', 'Not found.', 404);
+        }
+        setCookie(c, DOCS_COOKIE, expected, {
+          httpOnly: true,
+          secure: env.NODE_ENV === 'production',
+          sameSite: 'Lax',
+          path: '/docs',
+          maxAge: 8 * 60 * 60,
+        });
+        return c.redirect('/docs', 303);
+      }
     }
     return c.html(`<!doctype html>
   <html lang="en">

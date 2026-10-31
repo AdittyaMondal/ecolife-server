@@ -27,8 +27,32 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
   SESSION_COOKIE_NAME: z.string().min(1).default('ecolife_refresh'),
 
-  /** Web origin, for CORS. The mobile client is not browser-origin-bound. */
-  APP_ORIGIN: z.string().min(1),
+  /**
+   * Web origin(s) allowed by CORS. The mobile client is not
+   * browser-origin-bound and needs no entry here.
+   *
+   * Comma-separated for more than one, e.g. the deployed site plus
+   * http://localhost:3000 while developing against the hosted API.
+   */
+  APP_ORIGIN: z
+    .string()
+    .min(1)
+    .transform((v) =>
+      v
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+
+  /**
+   * This server's own public base URL, e.g. https://api.ecolife.app.
+   *
+   * Presentation only: it puts the real host at the top of the OpenAPI
+   * `servers` list, so the "try it" button on /docs calls the deployment
+   * instead of http://localhost:4000. Nothing routes on it, and leaving it
+   * unset changes no behaviour.
+   */
+  PUBLIC_API_URL: z.string().url().optional(),
 
   /**
    * Shared secret proving a request came from our own Next server.

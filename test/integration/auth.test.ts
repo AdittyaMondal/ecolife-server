@@ -461,7 +461,7 @@ describe('brute force is blocked even when the guess is right', () => {
         await consumeFailedAttempt(attacker, victim, bucket);
       }
 
-      const subject = identifierIpSubject(victim, '203.0.113.9');
+      const subject = identifierIpSubject('login', victim, '203.0.113.9');
       expect(subject).not.toBeNull();
       expect(await isExhausted(subject as string, bucket)).toBe(true);
 
@@ -490,6 +490,90 @@ describe('brute force is blocked even when the guess is right', () => {
         victimBlocked = true;
       }
       expect(victimBlocked).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'still has teeth when no client IP can be determined',
+    async () => {
+      const { assertNotLockedOut, consumeFailedAttempt } = await import(
+        '@common/middleware/rate-limit.ts'
+      );
+      await db.execute(sql`delete from rate_limits`);
+
+      const victim = `noip-${crypto.randomUUID()}@example.test`;
+      const bucket = { name: 'auth-strict', limit: 10, windowSeconds: 900 };
+
+      // No requestIP and no trusted proxy header: the per-IP limiter skips and
+      // the tight identifier+IP bucket cannot even be keyed. Before the loose
+      // fallback existed, that combination meant UNLIMITED password guesses.
+      const unknown = { req: { header: () => undefined }, env: undefined } as never;
+
+      let blockedEarly = false;
+      try {
+        await assertNotLockedOut(unknown, victim, bucket);
+      } catch {
+        blockedEarly = true;
+      }
+      expect(blockedEarly).toBe(false);
+
+      // The loose bucket is 5x, so it takes 50 failures, not 10.
+      for (let i = 0; i < bucket.limit * 5; i++) {
+        await consumeFailedAttempt(unknown, victim, bucket);
+      }
+
+      let blocked = false;
+      try {
+        await assertNotLockedOut(unknown, victim, bucket);
+      } catch {
+        blocked = true;
+      }
+      expect(blocked).toBe(true);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'keeps register and login buckets apart, so neither can lock the other',
+    async () => {
+      const { assertIdentifierNotLockedOut, consumeIdentifier } = await import(
+        '@common/middleware/rate-limit.ts'
+      );
+      await db.execute(sql`delete from rate_limits`);
+
+      const addr = `scoped-${crypto.randomUUID()}@example.test`;
+      const bucket = { name: 'auth-strict', limit: 10, windowSeconds: 900 };
+      const attacker = {
+        req: { header: () => undefined },
+        env: { requestIP: () => ({ address: '203.0.113.77' }) },
+      } as never;
+
+      // Spend the whole register budget for this address, tight and loose.
+      // `consume` throws as soon as the tight bucket (10) is full, long before
+      // the loose one (50) is — swallow that and keep charging, because the
+      // claim under test is about which SCOPE is affected, not when it trips.
+      for (let i = 0; i < bucket.limit * 5; i++) {
+        await consumeIdentifier(attacker, 'register', addr, bucket).catch(() => {});
+      }
+
+      let registerBlocked = false;
+      try {
+        await assertIdentifierNotLockedOut(attacker, 'register', addr, bucket);
+      } catch {
+        registerBlocked = true;
+      }
+      expect(registerBlocked).toBe(true);
+
+      // Login must be untouched: sharing one bucket would mean anyone able to
+      // hammer /register could lock an existing account out of /login.
+      let loginBlocked = false;
+      try {
+        await assertIdentifierNotLockedOut(attacker, 'login', addr, bucket);
+      } catch {
+        loginBlocked = true;
+      }
+      expect(loginBlocked).toBe(false);
     },
     TIMEOUT,
   );

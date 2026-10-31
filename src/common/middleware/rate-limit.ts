@@ -123,8 +123,7 @@ export async function consumeForIp(c: Context, bucket: Bucket): Promise<void> {
 }
 
 /**
- * Buckets keyed on the submitted identifier, consumed ONLY on a failed
- * attempt.
+ * Buckets keyed on the submitted identifier, for one auth channel (`scope`).
  *
  * The first version counted every attempt against `id:<email>` alone, which
  * handed anyone who knew your address a targeted lockout: ten bad guesses
@@ -137,31 +136,54 @@ export async function consumeForIp(c: Context, bucket: Bucket): Promise<void> {
  *                   still gets stopped; the cost of locking that account is
  *                   accepted, because at that point it IS under attack.
  *
- * Successful logins consume neither, so a user who types their password
- * correctly is never rate limited by someone else's failures.
+ * `scope` keeps the channels apart. Registration attempts sharing login's
+ * bucket would be the same cross-channel lockout in a new coat: fill the
+ * register bucket for an address and its owner cannot sign in.
  */
-export async function consumeFailedAttempt(
+function looseBucket(bucket: Bucket): Bucket {
+  return { ...bucket, name: `${bucket.name}-id`, limit: bucket.limit * 5 };
+}
+
+/** The tight `scope:<id>|<ip>` key, or null when the IP is unknown. */
+export function identifierIpSubject(
+  scope: string,
+  identifier: string,
+  ip: string | null,
+): string | null {
+  return ip ? `${scope}:${identifier.toLowerCase()}|${ip}` : null;
+}
+
+/** The loose `scope-id:<id>` key, which needs no IP. */
+export function identifierSubject(scope: string, identifier: string): string {
+  return `${scope}-id:${identifier.toLowerCase()}`;
+}
+
+/** Charges both buckets for one attempt on `scope`. */
+export async function consumeIdentifier(
+  c: Context,
+  scope: string,
+  identifier: string,
+  bucket: Bucket,
+): Promise<void> {
+  const tight = identifierIpSubject(scope, identifier, clientIp(c));
+  if (tight) await consume(tight, bucket);
+  await consume(identifierSubject(scope, identifier), looseBucket(bucket));
+}
+
+/** Login, charged ONLY on a failed attempt — a correct password costs nothing. */
+export function consumeFailedAttempt(
   c: Context,
   identifier: string,
   bucket: Bucket,
 ): Promise<void> {
-  const id = identifier.toLowerCase();
-  const ip = clientIp(c);
-  if (ip) await consume(`idip:${id}|${ip}`, bucket);
-  await consume(`id:${id}`, { ...bucket, name: `${bucket.name}-id`, limit: bucket.limit * 5 });
+  return consumeIdentifier(c, 'login', identifier, bucket);
 }
 
 /**
  * Read-only: is this bucket already full? Does NOT increment.
  *
  * Needed because the identifier buckets are charged only on failure, so
- * nothing would otherwise consult them before the next password check. Where
- * no client IP is available the per-IP limiter skips entirely, and without
- * this an attacker could guess without limit.
- *
- * The hard pre-check uses the identifier+IP bucket only. Checking the loose
- * identifier-wide bucket here would hand back the targeted lockout that
- * splitting them was meant to remove.
+ * nothing would otherwise consult them before the next password check.
  */
 export async function isExhausted(subject: string, bucket: Bucket): Promise<boolean> {
   const start = windowStart(bucket.windowSeconds);
@@ -178,22 +200,39 @@ export async function isExhausted(subject: string, bucket: Bucket): Promise<bool
   return (row?.count ?? 0) >= bucket.limit;
 }
 
-/** The identifier+IP bucket key, shared by the pre-check and the charge. */
-export function identifierIpSubject(identifier: string, ip: string | null): string | null {
-  return ip ? `idip:${identifier.toLowerCase()}|${ip}` : null;
-}
-
-/** Throws 429 when this attacker has already burned their attempts on this account. */
-export async function assertNotLockedOut(
+/**
+ * Throws 429 once the caller has burned their attempts on this identifier.
+ *
+ * Prefers the identifier+IP bucket: one attacker is stopped and the real user
+ * signing in from their own machine is not.
+ *
+ * With no determinable IP it falls back to the LOOSE identifier-wide bucket,
+ * and that fallback is the whole point. The per-IP limiter also skips without
+ * an IP, and the identifier buckets are charged only on failure — so before
+ * this fallback existed, a host we could not identify could guess passwords
+ * without any limit at all. The fallback does reintroduce a targeted lockout
+ * on such a host, which is why it is the 5x bucket and not the tight one, and
+ * why TRUSTED_PROXY_HOPS should be set on any deployment behind a proxy.
+ */
+export async function assertIdentifierNotLockedOut(
   c: Context,
+  scope: string,
   identifier: string,
   bucket: Bucket,
 ): Promise<void> {
-  const subject = identifierIpSubject(identifier, clientIp(c));
-  if (!subject) return;
-  if (await isExhausted(subject, bucket)) {
+  const tight = identifierIpSubject(scope, identifier, clientIp(c));
+  const [subject, applicable] = tight
+    ? ([tight, bucket] as const)
+    : ([identifierSubject(scope, identifier), looseBucket(bucket)] as const);
+
+  if (await isExhausted(subject, applicable)) {
     throw new DomainError('GEN_429', 'Too many attempts. Please wait and try again.', 429, {
-      retryAfterSeconds: bucket.windowSeconds,
+      retryAfterSeconds: applicable.windowSeconds,
     });
   }
+}
+
+/** Login's pre-check, run before the password is ever verified. */
+export function assertNotLockedOut(c: Context, identifier: string, bucket: Bucket): Promise<void> {
+  return assertIdentifierNotLockedOut(c, 'login', identifier, bucket);
 }

@@ -41,7 +41,14 @@ EXPOSE 4000
 # Readiness lives at /api/v1/health/ready for the platform's own probe.
 # Probed with bun rather than wget: wget's presence in this base image is an
 # assumption, bun's is not.
+#
+# EXEC form, and no backticks. The shell form runs through `sh -c`, which ate
+# the template literal as command substitution and choked on `??`:
+#   sh: http://127.0.0.1:${process.env.PORT??4000}/...: bad substitution
+# The probe then failed every single time, the task never became healthy, and
+# the orchestrator killed and rescheduled it forever -- which is what the
+# gateway was reporting as 502. Exec form never involves a shell.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD bun -e "fetch(`http://127.0.0.1:${process.env.PORT??4000}/api/v1/health`).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD ["bun", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 4000) + '/api/v1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
 
 CMD ["bun", "src/main.ts"]
