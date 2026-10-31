@@ -175,7 +175,7 @@ Failures are deliberately indistinguishable between unknown and wrong-password.
 | Code | Meaning | `data` |
 |---|---|---|
 | `200` | Signed out | [`OkMessage`](#okmessage) |
-| `501` | Not implemented yet | null |
+| `401` | Not authenticated | null |
 
 ### `GET` `/api/v1/auth/me`
 
