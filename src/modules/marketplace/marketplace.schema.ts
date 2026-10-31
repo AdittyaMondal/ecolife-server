@@ -1,3 +1,4 @@
+import { nullable } from '@common/openapi/envelope.ts';
 import { moneySchema } from '@common/openapi/shared-schemas.ts';
 import { z } from '@hono/zod-openapi';
 
@@ -130,7 +131,7 @@ export const orderSchema = z
     totalPaise: moneySchema,
     coinsSpent: z.number().int().openapi({ example: 480 }),
     status: orderStatusSchema,
-    address: addressSchema.nullable(),
+    address: nullable(addressSchema),
     createdAt: z.string().openapi({ example: '2026-10-31T10:02:00.000Z' }),
   })
   .openapi('Order');

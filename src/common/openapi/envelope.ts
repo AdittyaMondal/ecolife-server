@@ -72,3 +72,16 @@ export function notImplemented(): never {
 
 /** Marks a route as requiring the bearer access token. */
 export const secured = [{ bearerAuth: [] }];
+
+/**
+ * `X | null` at a USE site, without making the named component nullable.
+ *
+ * `namedSchema.nullable()` looks right but carries the registration with it, so
+ * zod-to-openapi emits the component itself as nullable — meaning even
+ * `past: z.array(goalSchema)` generates `(Goal | null)[]` and every consumer
+ * has to null-check a value that is never null there.
+ *
+ * A union emits the OpenAPI 3.1 form — `anyOf: [$ref, { type: 'null' }]` —
+ * which keeps the component clean and puts the nullability where it belongs.
+ */
+export const nullable = <T extends z.ZodType>(schema: T) => z.union([schema, z.null()]);

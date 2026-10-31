@@ -1063,13 +1063,27 @@
             "$ref": "#/components/schemas/Breakdown"
           },
           "activeGoal": {
-            "$ref": "#/components/schemas/ActiveGoalSummary"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActiveGoalSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "leaderboard": {
             "$ref": "#/components/schemas/LeaderboardPeek"
           },
           "nextEvent": {
-            "$ref": "#/components/schemas/NextEvent"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextEvent"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -1295,10 +1309,7 @@
         ]
       },
       "ActiveGoalSummary": {
-        "type": [
-          "object",
-          "null"
-        ],
+        "type": "object",
         "properties": {
           "id": {
             "type": "integer",
@@ -1387,10 +1398,7 @@
         ]
       },
       "NextEvent": {
-        "type": [
-          "object",
-          "null"
-        ],
+        "type": "object",
         "properties": {
           "id": {
             "type": "integer",
@@ -1773,7 +1781,14 @@
         "type": "object",
         "properties": {
           "active": {
-            "$ref": "#/components/schemas/Goal"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Goal"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "past": {
             "type": "array",
@@ -1788,10 +1803,7 @@
         ]
       },
       "Goal": {
-        "type": [
-          "object",
-          "null"
-        ],
+        "type": "object",
         "properties": {
           "id": {
             "type": "integer",
@@ -2301,7 +2313,14 @@
             "example": "placed"
           },
           "address": {
-            "$ref": "#/components/schemas/Address"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "createdAt": {
             "type": "string",
@@ -2322,10 +2341,7 @@
         ]
       },
       "Address": {
-        "type": [
-          "object",
-          "null"
-        ],
+        "type": "object",
         "properties": {
           "id": {
             "type": "integer",
@@ -2607,18 +2623,21 @@
             "example": true
           },
           "passStatus": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "registered",
-              "checked_in",
-              "cancelled",
-              "no_show",
-              null
-            ],
-            "example": "registered"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "registered",
+                  "checked_in",
+                  "cancelled",
+                  "no_show"
+                ],
+                "example": "registered"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2886,18 +2905,15 @@
             "example": 100
           },
           "attendeeReward": {
-            "allOf": [
+            "anyOf": [
               {
                 "$ref": "#/components/schemas/RewardGrant"
               },
               {
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "description": "Null when already checked in — the reward was granted on the first scan"
+                "type": "null"
               }
-            ]
+            ],
+            "description": "Null when already checked in — the reward was granted on the first scan"
           }
         },
         "required": [
