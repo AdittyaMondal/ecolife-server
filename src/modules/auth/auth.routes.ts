@@ -114,7 +114,7 @@ authRoutes.openapi(
           accessTokenExpiresIn: r.expiresIn,
           refreshToken: deliverRefresh(c, r.refreshToken),
         },
-        user: service.publicUser(r.user, r.membership),
+        user: service.publicUser(r.user, r.membership, await service.profileState(r.user.id)),
       },
       201,
     );
@@ -164,7 +164,7 @@ authRoutes.openapi(
           accessTokenExpiresIn: r.expiresIn,
           refreshToken: deliverRefresh(c, r.refreshToken),
         },
-        user: service.publicUser(r.user, r.membership),
+        user: service.publicUser(r.user, r.membership, await service.profileState(r.user.id)),
       },
       200,
     );

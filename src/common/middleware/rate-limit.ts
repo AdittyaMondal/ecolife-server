@@ -37,6 +37,17 @@ export const BUCKETS = {
  * entries are whatever the client sent (CLAUDE.md §4.1.1).
  */
 export function clientIp(c: Context): string | null {
+  // An asserted IP from our OWN Next server, proven by a shared secret the
+  // browser does not have (CLAUDE.md §4.1.1).
+  //
+  // This is not a nicety. Every browser request arrives through
+  // ecolife-web's route handlers, so without it the socket address is the
+  // Next container for ALL users — one shared bucket, and the first ten bad
+  // logins lock out everybody. That is the exact DoS that removing the
+  // 'unknown' fallback was meant to prevent, reintroduced by topology.
+  const asserted = trustedAssertedIp(c);
+  if (asserted) return asserted;
+
   const hops = env.TRUSTED_PROXY_HOPS;
   if (hops > 0) {
     const chain = (c.req.header('x-forwarded-for') ?? '')
@@ -54,6 +65,29 @@ export function clientIp(c: Context): string | null {
 /** Cheap shape check, so a forged header cannot inject an arbitrary bucket key. */
 function isIpLike(value: string): boolean {
   return /^[0-9a-fA-F:.]{3,45}$/.test(value);
+}
+
+/**
+ * The end-user IP asserted by a caller holding INTERNAL_PROXY_TOKEN.
+ *
+ * The token is what separates this from trusting `x-forwarded-for`: anyone
+ * can send a header, but only our own server has the secret. Compared in
+ * constant time, and lengths are checked first because timingSafeEqual
+ * throws on a length mismatch — which would itself leak the length.
+ *
+ * Returns null unless BOTH the token verifies and the address is well
+ * formed, so a valid token still cannot inject an arbitrary bucket key.
+ */
+function trustedAssertedIp(c: Context): string | null {
+  const expected = env.INTERNAL_PROXY_TOKEN;
+  if (!expected) return null;
+
+  const presented = c.req.header('x-ecolife-internal');
+  if (!presented || presented.length !== expected.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(presented), Buffer.from(expected))) return null;
+
+  const claimed = c.req.header('x-ecolife-client-ip')?.trim();
+  return claimed && isIpLike(claimed) ? claimed : null;
 }
 
 let warnedNoIp = false;

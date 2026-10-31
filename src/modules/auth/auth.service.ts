@@ -37,10 +37,18 @@ async function sessionPayload(userId: number, meta: Meta) {
 export function publicUser(
   user: Awaited<ReturnType<typeof repo.findUserById>>,
   membership: Awaited<ReturnType<typeof repo.findMembership>>,
-  state: { completedSteps: number; unreadNotifications: number } = {
-    completedSteps: 0,
-    unreadNotifications: 0,
-  },
+  /**
+   * Required, with no default.
+   *
+   * It used to default to `{ completedSteps: 0 }`, and login and register
+   * both took that default — so every sign-in reported zero completed steps
+   * however far through onboarding the user actually was. The web client
+   * routes a partially-onboarded user to `/step/{completedSteps + 1}`, so
+   * resuming on another device sent them back to question one, which is the
+   * one thing the server-persisted wizard exists to prevent. A default that
+   * is silently wrong is worse than an argument the compiler demands.
+   */
+  state: { completedSteps: number; unreadNotifications: number },
 ) {
   if (!user) throw new DomainError('AUTH_001', 'Account not found.', 401);
   return {
@@ -139,6 +147,11 @@ export async function refresh(presented: string, meta: Meta) {
 
 export async function logout(presented: string | null) {
   if (presented) await revokeSession(presented);
+}
+
+/** Onboarding progress and the unread badge, for any response carrying a user. */
+export function profileState(userId: number) {
+  return repo.findProfileState(userId);
 }
 
 export async function me(userId: number) {
