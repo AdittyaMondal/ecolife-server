@@ -3505,10 +3505,42 @@
             "type": "string",
             "maxLength": 1000,
             "example": "GST certificate checked."
+          },
+          "expected": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "example": "Acme Industries"
+              },
+              "logoUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "example": null
+              },
+              "websiteUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "example": "https://acme.example.com"
+              }
+            },
+            "required": [
+              "name",
+              "logoUrl",
+              "websiteUrl"
+            ],
+            "description": "The identity fields exactly as the review queue showed them. Compared inside the UPDATE, so an edit landing mid-decision is refused rather than approved unseen."
           }
         },
         "required": [
-          "decision"
+          "decision",
+          "expected"
         ]
       },
       "Notification": {

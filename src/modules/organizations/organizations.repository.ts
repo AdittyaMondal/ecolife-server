@@ -184,6 +184,38 @@ export async function updateOrganizationChecked(
   });
 }
 
+/**
+ * The admin decision, applied ONLY if the organization still looks the way
+ * the queue showed it.
+ *
+ * The comparison belongs in the WHERE, not in a prior SELECT: checking and
+ * then writing is the same read-then-write race this module already fixed
+ * once, and here the window is wide — an admin reads the queue, thinks,
+ * then clicks. All three identity fields are compared, not just the name,
+ * because a swapped logo or website impersonates just as well.
+ *
+ * `IS NOT DISTINCT FROM` so NULL matches NULL.
+ */
+export async function reviewIfUnchanged(
+  id: number,
+  values: Partial<typeof organizations.$inferInsert>,
+  expected: { name: string; logoUrl: string | null; websiteUrl: string | null },
+) {
+  const [row] = await db
+    .update(organizations)
+    .set({ ...values, updatedAt: new Date() })
+    .where(
+      and(
+        eq(organizations.id, id),
+        eq(organizations.name, expected.name),
+        sql`${organizations.logoUrl} is not distinct from ${expected.logoUrl}`,
+        sql`${organizations.websiteUrl} is not distinct from ${expected.websiteUrl}`,
+      ),
+    )
+    .returning({ id: organizations.id });
+  return row ?? null;
+}
+
 export async function updateOrganization(
   id: number,
   values: Partial<typeof organizations.$inferInsert>,

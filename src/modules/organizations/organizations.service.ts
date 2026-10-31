@@ -222,7 +222,11 @@ export async function joinByCode(userId: number, code: string) {
   }
 
   if (org.status !== 'approved') {
-    throw new DomainError('ORG_002', `This organization is ${org.status}. Only approved organizations can accept members.`, 403);
+    throw new DomainError(
+      'ORG_002',
+      `This organization is ${org.status}. Only approved organizations can accept members.`,
+      403,
+    );
   }
 
   try {
@@ -359,26 +363,14 @@ const DECISION_STATUS = {
 export async function review(
   adminId: number,
   organizationId: number,
-  body: { decision: keyof typeof DECISION_STATUS; note?: string; expectedName: string },
+  body: {
+    decision: keyof typeof DECISION_STATUS;
+    note?: string;
+    expected: { name: string; logoUrl: string | null; websiteUrl: string | null };
+  },
 ) {
   const org = await repo.findById(organizationId);
   if (!org) throw new DomainError('ORG_007', 'Organization not found.', 404);
-
-  /**
-   * Refuse if it is not the organization the admin was looking at.
-   *
-   * Renaming an APPROVED organization already sends it back for review.
-   * This closes the other half: renaming a PENDING one between the admin
-   * opening the queue and clicking approve, so a name they never saw
-   * carries their decision. Cheap optimistic concurrency — the queue
-   * already has the name, it just has to say so.
-   */
-  if (org.name !== body.expectedName) {
-    throw new DomainError('ORG_012', 'This organization was renamed — review it again.', 409, {
-      expected: body.expectedName,
-      actual: org.name,
-    });
-  }
 
   // A refusal a human will have to defend later should be explained now,
   // while they still remember why.
@@ -386,12 +378,32 @@ export async function review(
     throw new DomainError('ORG_010', 'A rejection or suspension needs a note.', 422);
   }
 
-  await repo.updateOrganization(organizationId, {
-    status: DECISION_STATUS[body.decision],
-    reviewedBy: adminId,
-    reviewedAt: new Date(),
-    reviewNote: body.note?.trim() ?? null,
-  });
+  /**
+   * Decide only if it is still the organization the admin was looking at.
+   *
+   * The comparison is part of the UPDATE rather than a check before it:
+   * an admin reads the queue, thinks, then clicks, and an owner can edit
+   * in that gap. Renaming an APPROVED organization already sends it back
+   * for review; this closes the other direction, where a PENDING one is
+   * changed between being read and being approved.
+   */
+  const applied = await repo.reviewIfUnchanged(
+    organizationId,
+    {
+      status: DECISION_STATUS[body.decision],
+      reviewedBy: adminId,
+      reviewedAt: new Date(),
+      reviewNote: body.note?.trim() ?? null,
+    },
+    body.expected,
+  );
+
+  if (!applied) {
+    throw new DomainError('ORG_012', 'This organization changed — review it again.', 409, {
+      expected: body.expected,
+      actual: { name: org.name, logoUrl: org.logoUrl, websiteUrl: org.websiteUrl },
+    });
+  }
 
   const fresh = await repo.findById(organizationId);
   if (!fresh) throw new DomainError('ORG_007', 'Organization not found.', 404);

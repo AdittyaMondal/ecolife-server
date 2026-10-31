@@ -225,7 +225,10 @@ organizationRoutes.openapi(
     middleware: [requireUser] as const,
     security: secured,
     request: {
-      body: { content: { 'application/json': { schema: joinOrganizationBodySchema } }, required: true },
+      body: {
+        content: { 'application/json': { schema: joinOrganizationBodySchema } },
+        required: true,
+      },
     },
     responses: {
       200: jsonOk(joinResultSchema, 'Joined successfully'),

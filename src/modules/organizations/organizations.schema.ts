@@ -144,11 +144,17 @@ export const reviewOrganizationBodySchema = z
      * owner who renames in between would otherwise have a name the admin
      * never saw stamped with that admin's approval.
      */
-    expectedName: z
-      .string()
-      .min(1)
-      .max(120)
-      .openapi({ example: 'Acme Industries', description: 'The name shown in the queue' }),
+    expected: z
+      .object({
+        name: z.string().min(1).max(120).openapi({ example: 'Acme Industries' }),
+        logoUrl: z.string().nullable().openapi({ example: null }),
+        websiteUrl: z.string().nullable().openapi({ example: 'https://acme.example.com' }),
+      })
+      .openapi({
+        description:
+          'The identity fields exactly as the review queue showed them. Compared inside the ' +
+          'UPDATE, so an edit landing mid-decision is refused rather than approved unseen.',
+      }),
   })
   .openapi('ReviewOrganizationBody');
 

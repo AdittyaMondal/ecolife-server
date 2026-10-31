@@ -1525,6 +1525,7 @@ A rejection or suspension requires a note — a decision a human has to defend l
 |---|---|---|---|
 | `decision` | `approve` \| `reject` \| `suspend` \| `reinstate` | yes | e.g. `"approve"` |
 | `note` | string | no | e.g. `"GST certificate checked."` |
+| `expected` | object | yes | The identity fields exactly as the review queue showed them. Compared inside the UPDATE, so an edit landing mid-decision is refused rather than approved unseen. |
 
 **Responses**
 
@@ -2647,6 +2648,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `decision` | `approve` \| `reject` \| `suspend` \| `reinstate` | yes | e.g. `"approve"` |
 | `note` | string | no | e.g. `"GST certificate checked."` |
+| `expected` | object | yes | The identity fields exactly as the review queue showed them. Compared inside the UPDATE, so an edit landing mid-decision is refused rather than approved unseen. |
 
 ### RewardEntry
 
