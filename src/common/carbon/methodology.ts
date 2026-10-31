@@ -1,4 +1,5 @@
 import {
+  AC_HOURS_MIDPOINT,
   AC_KWH_PER_HOUR,
   AVG_FLIGHT_TRIP_KM,
   BATH_LITRES,
@@ -64,6 +65,7 @@ export const METHODOLOGY_FACTORS: readonly PublishedFactor[] = [
   ...group('home_energy.cooking_units_per_person_month', COOKING_UNITS_PER_PERSON_MONTH),
   single('home_energy.induction_kwh_per_person_day', INDUCTION_KWH_PER_PERSON_DAY),
   single('home_energy.ac_kwh_per_hour', AC_KWH_PER_HOUR),
+  ...group('home_energy.ac_hours_midpoint', AC_HOURS_MIDPOINT),
   single('home_energy.kwh_estimate_base', KWH_ESTIMATE_BASE),
   single('home_energy.kwh_estimate_per_person', KWH_ESTIMATE_PER_PERSON),
   ...group('home_energy.kwh_estimate_cooling_adder', KWH_ESTIMATE_COOLING_ADDER),

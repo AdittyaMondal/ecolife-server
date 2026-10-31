@@ -981,7 +981,10 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "maxLength": 512,
+            "format": "uri",
+            "example": "https://cdn.ecolife.app/avatars/abc123.webp"
           },
           "answers": {
             "$ref": "#/components/schemas/OnboardingAnswers"
@@ -1514,7 +1517,7 @@
                 "type": "integer"
               },
               "answers": {
-                "$ref": "#/components/schemas/DailyAnswers"
+                "$ref": "#/components/schemas/StoredDailyAnswers"
               },
               "editableUntil": {
                 "type": "string"
@@ -1534,7 +1537,7 @@
           "defaults": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/DailyAnswers"
+                "$ref": "#/components/schemas/StoredDailyAnswers"
               },
               {
                 "description": "The one-tap \"Same as usual\" prefill, derived from the baseline"
@@ -1549,16 +1552,9 @@
           "defaults"
         ]
       },
-      "DailyAnswers": {
+      "StoredDailyAnswers": {
         "type": "object",
         "properties": {
-          "trips": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Trip"
-            },
-            "maxItems": 20
-          },
           "vegMeals": {
             "type": "integer",
             "minimum": 0,
@@ -1599,41 +1595,29 @@
           "wasteActions": {
             "type": "array",
             "items": {
-              "type": "string",
-              "enum": [
-                "segregated",
-                "composted",
-                "refused_plastic",
-                "none_of_these"
-              ],
-              "example": "segregated"
+              "type": "string"
             },
-            "maxItems": 4
+            "example": [
+              "segregated"
+            ]
+          },
+          "trips": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoredTrip"
+            }
           }
         }
       },
-      "Trip": {
+      "StoredTrip": {
         "type": "object",
         "properties": {
           "mode": {
             "type": "string",
-            "enum": [
-              "walk",
-              "cycle",
-              "bus",
-              "metro_train",
-              "two_wheeler",
-              "car",
-              "cab",
-              "auto_rickshaw",
-              "work_from_home"
-            ],
             "example": "bus"
           },
           "km": {
             "type": "number",
-            "minimum": 0,
-            "maximum": 500,
             "example": 14.5
           }
         },
@@ -1811,6 +1795,99 @@
           "clientLogId",
           "logDate",
           "answers"
+        ]
+      },
+      "DailyAnswers": {
+        "type": "object",
+        "properties": {
+          "trips": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Trip"
+            },
+            "maxItems": 20
+          },
+          "vegMeals": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "example": 2
+          },
+          "nonVegMeals": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "example": 0
+          },
+          "veganMeals": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "example": 1
+          },
+          "acHoursBucket": {
+            "type": "string",
+            "enum": [
+              "0",
+              "1_3",
+              "4_8",
+              "8_plus"
+            ],
+            "example": "1_3"
+          },
+          "bathChoice": {
+            "type": "string",
+            "enum": [
+              "bucket",
+              "short_shower",
+              "long_shower"
+            ],
+            "example": "bucket"
+          },
+          "wasteActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "segregated",
+                "composted",
+                "refused_plastic",
+                "none_of_these"
+              ],
+              "example": "segregated"
+            },
+            "maxItems": 4
+          }
+        }
+      },
+      "Trip": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "walk",
+              "cycle",
+              "bus",
+              "metro_train",
+              "two_wheeler",
+              "car",
+              "cab",
+              "auto_rickshaw",
+              "work_from_home"
+            ],
+            "example": "bus"
+          },
+          "km": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 500,
+            "example": 14.5
+          }
+        },
+        "required": [
+          "mode",
+          "km"
         ]
       },
       "HistoryPoint": {
@@ -4620,16 +4697,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Not implemented yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
           }
         }
       }
@@ -4706,16 +4773,6 @@
               }
             }
           },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Domain rule violation",
             "content": {
@@ -4728,16 +4785,6 @@
           },
           "429": {
             "description": "Rate limited — see Retry-After",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet",
             "content": {
               "application/json": {
                 "schema": {
@@ -4850,16 +4897,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Not implemented yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
           }
         }
       }
@@ -4964,16 +5001,6 @@
           },
           "401": {
             "description": "Not authenticated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet",
             "content": {
               "application/json": {
                 "schema": {

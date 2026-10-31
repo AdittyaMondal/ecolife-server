@@ -3,6 +3,7 @@ import { ok } from '@common/interceptors/response-envelope.ts';
 import { errorResponses, jsonOk, secured } from '@common/openapi/envelope.ts';
 import { createModule } from '@common/openapi/factory.ts';
 import { cursorQuery, idParam, paginated } from '@common/openapi/params.ts';
+import { externalImageUrlSchema } from '@common/openapi/shared-schemas.ts';
 import { createRoute, z } from '@hono/zod-openapi';
 import {
   onboardingCompleteResultSchema,
@@ -114,7 +115,7 @@ profileRoutes.openapi(
               .object({
                 name: z.string().min(1).max(80).optional(),
                 timezone: z.string().optional(),
-                avatarUrl: z.string().nullable().optional(),
+                avatarUrl: externalImageUrlSchema.nullable().optional(),
                 answers: onboardingStateSchema.shape.answers.optional(),
               })
               .openapi('ProfilePatchBody'),

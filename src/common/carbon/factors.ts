@@ -242,6 +242,22 @@ export const INDUCTION_KWH_PER_PERSON_DAY = f(
 /** 1.5-ton split unit. Used by the daily AC-hours question, not by the baseline. */
 export const AC_KWH_PER_HOUR = f(1.5, 'kWh/hour', '1.5-ton split unit', APPENDIX_A);
 
+/**
+ * Hours assumed for each daily AC bucket.
+ *
+ * The question asks for a bucket rather than a number because nobody knows
+ * how long their AC ran, and a bucket answered honestly beats a figure
+ * guessed precisely. Each value is the midpoint of its range; `8_plus` is
+ * open-ended, so 10 stands in for "most of the night and then some" rather
+ * than for its unbounded true mean.
+ */
+export const AC_HOURS_MIDPOINT = {
+  '0': f(0, 'hours', 'AC not used', APPENDIX_A),
+  '1_3': f(2, 'hours', 'midpoint of 1-3 hours', APPENDIX_A),
+  '4_8': f(6, 'hours', 'midpoint of 4-8 hours', APPENDIX_A),
+  '8_plus': f(10, 'hours', 'open-ended bucket, assumed 10 hours', APPENDIX_A),
+} as const satisfies Record<AcHoursBucket, Factor>;
+
 /** `estimateKwhMonth` = BASE + PER_PERSON x householdSize + the cooling adder. */
 export const KWH_ESTIMATE_BASE = f(
   60,
