@@ -50,8 +50,31 @@ export async function rotateSession(
 
   if (!row) return { ok: false, reason: 'unknown' };
 
-  if (row.revokedAt) {
-    // Already rotated, yet presented again. Burn the family.
+  if (row.expiresAt.getTime() < Date.now()) return { ok: false, reason: 'expired' };
+
+  /**
+   * Claim the token with a CONDITIONAL update, not a read-then-write.
+   *
+   * The previous version read `revokedAt`, checked it in JS, then revoked. Two
+   * concurrent requests carrying the same token both read null, both passed
+   * the check, and both rotated — producing two live tokens and silently
+   * defeating reuse detection. That race IS the attack: a stolen token used at
+   * the same moment as the victim's would go unnoticed, which is precisely
+   * what reuse detection exists to catch.
+   *
+   * `WHERE revoked_at IS NULL` makes the claim atomic. Exactly one caller gets
+   * a row back; anyone else is, by definition, presenting an already-rotated
+   * token.
+   */
+  const claimed = await db
+    .update(sessions)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(sessions.id, row.id), isNull(sessions.revokedAt)))
+    .returning({ id: sessions.id });
+
+  if (claimed.length === 0) {
+    // Lost the race, or the token was already spent. Either way it has been
+    // presented twice. Burn the family.
     await db
       .update(sessions)
       .set({ revokedAt: new Date() })
@@ -60,20 +83,15 @@ export async function rotateSession(
     return { ok: false, reason: 'reused' };
   }
 
-  if (row.expiresAt.getTime() < Date.now()) return { ok: false, reason: 'expired' };
-
   const next = mintRefreshToken();
-  await db.transaction(async (tx) => {
-    await tx.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, row.id));
-    await tx.insert(sessions).values({
-      userId: row.userId,
-      refreshTokenHash: await hashToken(next),
-      familyId: row.familyId,
-      platform: row.platform,
-      expiresAt: new Date(Date.now() + ttlMs()),
-      ipAddress: meta.ip ?? null,
-      userAgent: meta.userAgent ?? null,
-    });
+  await db.insert(sessions).values({
+    userId: row.userId,
+    refreshTokenHash: await hashToken(next),
+    familyId: row.familyId,
+    platform: row.platform,
+    expiresAt: new Date(Date.now() + ttlMs()),
+    ipAddress: meta.ip ?? null,
+    userAgent: meta.userAgent ?? null,
   });
 
   return { ok: true, userId: row.userId, refreshToken: next };

@@ -1,7 +1,13 @@
 import { DomainError } from '@common/errors/domain-error.ts';
 import { requireUser } from '@common/guards/auth.guard.ts';
 import { ok } from '@common/interceptors/response-envelope.ts';
-import { BUCKETS, clientIp, consume, consumeForIdentifier } from '@common/middleware/rate-limit.ts';
+import {
+  BUCKETS,
+  clientIp,
+  consume,
+  consumeFailedAttempt,
+  consumeForIp,
+} from '@common/middleware/rate-limit.ts';
 import { errorResponses, jsonOk, secured } from '@common/openapi/envelope.ts';
 import { createModule } from '@common/openapi/factory.ts';
 import { env } from '@config/env.ts';
@@ -31,7 +37,9 @@ const platformOf = (c: Context): Platform => {
 };
 
 const metaOf = (c: Context) => ({
-  ip: clientIp(c),
+  // clientIp returns null when no IP can be established; sessions stores it
+  // nullable, so undefined is the right shape here.
+  ip: clientIp(c) ?? undefined,
   userAgent: c.req.header('user-agent'),
   platform: platformOf(c),
 });
@@ -82,8 +90,7 @@ authRoutes.openapi(
   }),
   async (c) => {
     const body = c.req.valid('json');
-    await consume(`ip:${clientIp(c)}`, BUCKETS.authStrict);
-    await consumeForIdentifier(body.email, BUCKETS.authStrict);
+    await consumeForIp(c, BUCKETS.authStrict);
 
     const r = await service.register(body, metaOf(c));
     service.deliverEmailToken('verify', body.email, r.verificationToken);
@@ -118,12 +125,19 @@ authRoutes.openapi(
   }),
   async (c) => {
     const body = c.req.valid('json');
-    // Both buckets: per-IP alone misses a distributed attempt on one account,
-    // per-identifier alone misses one host spraying many accounts.
-    await consume(`ip:${clientIp(c)}`, BUCKETS.authStrict);
-    await consumeForIdentifier(body.email, BUCKETS.authStrict);
+    // Per-IP on every attempt: one host spraying many accounts.
+    await consumeForIp(c, BUCKETS.authStrict);
 
-    const r = await service.login(body.email, body.password, metaOf(c));
+    // The identifier buckets are charged only when the attempt FAILS.
+    // Counting successes too would let anyone who knows your address lock you
+    // out with ten bad guesses.
+    let r: Awaited<ReturnType<typeof service.login>>;
+    try {
+      r = await service.login(body.email, body.password, metaOf(c));
+    } catch (err) {
+      await consumeFailedAttempt(c, body.email, BUCKETS.authStrict);
+      throw err;
+    }
     return ok(
       c,
       {
@@ -259,7 +273,7 @@ authRoutes.openapi(
   }),
   async (c) => {
     const body = c.req.valid('json');
-    await consume(`ip:${clientIp(c)}`, BUCKETS.authStrict);
+    await consumeForIp(c, BUCKETS.authStrict);
     const token = await service.forgotPassword(body.email);
     if (token) service.deliverEmailToken('reset', body.email, token);
     // Always the same answer. A 404 here is an account-existence oracle that

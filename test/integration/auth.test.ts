@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { db } from '@database/client.ts';
-import { organizationMembers, organizations, users } from '@database/schema/index.ts';
-import { eq, like, sql } from 'drizzle-orm';
+import {
+  organizationMembers,
+  organizations,
+  rateLimits,
+  sessions,
+  users,
+} from '@database/schema/index.ts';
+import { and, eq, like, ne, sql } from 'drizzle-orm';
 import { app } from '../../src/app.ts';
 
 /**
@@ -12,6 +18,8 @@ import { app } from '../../src/app.ts';
  */
 const TIMEOUT = 30_000;
 const PW = 'correct horse battery staple';
+/** auth-strict is 10; the identifier-only bucket is 5x looser. */
+const BUCKET_CEILING = 50;
 const email = () => `authtest-${crypto.randomUUID()}@example.test`;
 
 const call = (path: string, init: RequestInit = {}) =>
@@ -20,7 +28,14 @@ const call = (path: string, init: RequestInit = {}) =>
     headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
   });
 
-const json = async (r: Response) => (await r.json()) as { status: boolean; data: any; error: any };
+type Envelope = {
+  status: boolean;
+  // biome-ignore lint/suspicious/noExplicitAny: a test reads arbitrary response JSON; typing every shape here would duplicate the contract without checking it
+  data: any;
+  // biome-ignore lint/suspicious/noExplicitAny: same — details differ per error code
+  error: { code: string; message: string; details: any };
+};
+const json = async (r: Response) => (await r.json()) as unknown as Envelope;
 
 async function registerUser(extra: Record<string, unknown> = {}) {
   const addr = email();
@@ -272,7 +287,10 @@ describe('organization membership', () => {
             type: 'ngo',
           })
           .returning();
-        return o!.id;
+        // A guard, not `!`: biome's unsafe autofix rewrites `!` to `?.`, which
+        // silently widens this to number | undefined and breaks the insert.
+        if (!o) throw new Error('organization insert returned no row');
+        return o.id;
       };
       await db
         .insert(organizationMembers)
@@ -319,24 +337,105 @@ describe('password reset', () => {
 
 describe('rate limiting', () => {
   it(
-    'blocks repeated login attempts on one account with a Retry-After hint',
+    'charges the identifier bucket on a FAILED login but not on a successful one',
     async () => {
       const { addr } = await registerUser();
-      let blocked = 0;
+      const buckets = async () =>
+        (
+          await db
+            .select({ subject: rateLimits.subject, count: rateLimits.count })
+            .from(rateLimits)
+            .where(like(rateLimits.subject, `%${addr.toLowerCase()}%`))
+        ).reduce((n, r) => n + r.count, 0);
+
+      await db.execute(sql`delete from rate_limits`);
+
+      await call('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: addr, password: 'definitely wrong' }),
+      });
+      const afterFailure = await buckets();
+      expect(afterFailure).toBeGreaterThan(0);
+
+      await call('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: addr, password: PW }),
+      });
+      // The whole point of the fix: typing your password correctly must never
+      // move you closer to being locked out. Anyone who knows your address could
+      // otherwise block you with ten bad guesses.
+      expect(await buckets()).toBe(afterFailure);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'blocks once the identifier bucket is genuinely exhausted',
+    async () => {
+      const { addr } = await registerUser();
+      await db.execute(sql`delete from rate_limits`);
+
+      // Drive the loose identifier bucket to its ceiling directly. Doing this
+      // through HTTP would mean 50+ argon2 verifies, which is slow for no extra
+      // coverage — the route's wiring is asserted by the test above.
+      const { consumeFailedAttempt } = await import('@common/middleware/rate-limit.ts');
+      const fakeCtx = { req: { header: () => undefined }, env: undefined } as never;
+
+      let blocked = false;
       let retryAfter = 0;
-      // authStrict is 10/15min, keyed on IP AND on the submitted identifier.
-      for (let i = 0; i < 14; i++) {
-        const res = await call('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ email: addr, password: 'wrong wrong wrong' }),
-        });
-        if (res.status === 429) {
-          blocked++;
-          retryAfter = (await json(res)).error.details.retryAfterSeconds;
+      for (let i = 0; i < BUCKET_CEILING + 2 && !blocked; i++) {
+        try {
+          await consumeFailedAttempt(fakeCtx, addr, {
+            name: 'auth-strict',
+            limit: 10,
+            windowSeconds: 900,
+          });
+        } catch (e) {
+          blocked = true;
+          retryAfter =
+            (e as { details?: { retryAfterSeconds?: number } }).details?.retryAfterSeconds ?? 0;
         }
       }
-      expect(blocked).toBeGreaterThan(0);
+      expect(blocked).toBe(true);
       expect(retryAfter).toBeGreaterThan(0);
+    },
+    TIMEOUT,
+  );
+});
+
+describe('rotation is atomic under concurrency', () => {
+  it(
+    'lets exactly one of ten simultaneous rotations win, and revokes the family',
+    async () => {
+      const { startSession, rotateSession } = await import('@common/auth/session.ts');
+      const { body } = await registerUser();
+      const userId = body.data.user.id as number;
+
+      const { refreshToken, familyId } = await startSession(userId, 'ios');
+      // The bug this guards: a read-then-write let two concurrent requests both
+      // see revoked_at IS NULL, both pass the check and both rotate — producing
+      // two live tokens and silently defeating reuse detection. That race IS the
+      // attack, because a stolen token used at the same moment as the victim's
+      // would go unnoticed.
+      const results = await Promise.all(
+        Array.from({ length: 10 }, () => rotateSession(refreshToken)),
+      );
+
+      expect(results.filter((r) => r.ok)).toHaveLength(1);
+      expect(results.filter((r) => !r.ok && r.reason === 'reused')).toHaveLength(9);
+
+      // Scoped to THIS family. The registration session is a separate family
+      // and must survive — revoking it would mean one compromised token logged
+      // the user out of unrelated devices.
+      const family = await db.select().from(sessions).where(eq(sessions.familyId, familyId));
+      expect(family.length).toBeGreaterThan(1);
+      expect(family.every((r) => r.revokedAt !== null)).toBe(true);
+
+      const others = await db
+        .select()
+        .from(sessions)
+        .where(and(eq(sessions.userId, userId), ne(sessions.familyId, familyId)));
+      expect(others.some((r) => r.revokedAt === null)).toBe(true);
     },
     TIMEOUT,
   );
