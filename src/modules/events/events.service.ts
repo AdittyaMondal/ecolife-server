@@ -239,6 +239,19 @@ function passView(pass: repo.PassRow, event: repo.EventRow, passCode: string | n
   };
 }
 
+/**
+ * Registration.
+ *
+ * KNOWN GAP, stated rather than hidden: `visibility: 'invite_only'` keeps an
+ * event out of discovery, but it does not restrict who may join one whose
+ * slug or id they have learned. There is no invitations table in the schema,
+ * so there is no fact about "was this person invited" to check against —
+ * enforcing it would mean inventing a membership rule out of nothing, and a
+ * guess that looks like a control is worse than a documented absence.
+ *
+ * Closing it properly needs an `event_invitations` table (or a signed invite
+ * token), and then a predicate here, in `bySlug`, and in the listing.
+ */
 export async function register(userId: number, eventId: number) {
   const event = await repo.rawEvent(eventId);
   if (!event) throw new DomainError('EVENT_009', 'Event not found.', 404);
@@ -324,6 +337,13 @@ export async function participants(userId: number, eventId: number) {
   };
 }
 
+/** True when this user hosts or co-hosts the event. */
+async function isRunning(tx: Executor, event: repo.EventRow, userId: number) {
+  if (event.hostId === userId) return true;
+  const { isCoHost } = await repo.isHostOrCoHost(event.id, userId, tx);
+  return isCoHost;
+}
+
 /**
  * The seven ordered checks of PRD-v2 §6.6.4.
  *
@@ -348,7 +368,15 @@ async function checkIn(
       throw new DomainError('EVENT_002', 'No pass with that code for this event.', 404);
     }
 
-    // 3. inside the scan window
+    // 3. the event is actually running. A cancelled drive must not credit
+    // attendance, and a draft has no attendees to credit.
+    if (event.status !== 'published' && event.status !== 'ongoing') {
+      throw new DomainError('EVENT_003', 'Check-in is not open for this event.', 422, {
+        status: event.status,
+      });
+    }
+
+    // ...and inside the scan window.
     const now = Date.now();
     if (
       now < event.startAt.getTime() - SCAN_OPENS_MS ||
@@ -390,14 +418,31 @@ async function checkIn(
     const bumped = await repo.bumpCheckedIn(tx, eventId);
     if (!bumped) throw new DomainError('EVENT_005', 'This event is full.', 422);
 
-    // 7. credit the attendee. Verification gates earning, so an unverified
-    // attendee is still checked in — they simply earn nothing.
+    /**
+     * 7. credit the attendee — unless the attendee is running the event.
+     *
+     * `[LESSON]` Without this, one account is an unbounded points machine:
+     * create an event starting now, register for it, scan your own pass,
+     * collect 200 points, repeat with a new event for a new pass id. The
+     * host check at step 1 passes because you ARE the host, and the scan
+     * window is open because you chose the start time. The same shape as
+     * the goal-backdating farm, in a different module.
+     *
+     * The check-in itself still happens: a host who is genuinely present
+     * belongs in their own participant list and counter. Only the
+     * attendance REWARD is refused, because attending the thing you are
+     * running is not the behaviour that reward exists to encourage.
+     *
+     * Verification separately gates earning, so an unverified attendee is
+     * also checked in and simply earns nothing.
+     */
+    const runsThisEvent = await isRunning(tx, event, pass.userId);
     let attendeeReward: {
       pointsDelta: number;
       coinsDelta: number;
       reasons: { source: string; points: number; coins: number }[];
     } | null = null;
-    if (attendee?.emailVerifiedAt) {
+    if (attendee?.emailVerifiedAt && !runsThisEvent) {
       const result = await award(tx, {
         userId: pass.userId,
         pointsDelta: REWARDS.eventAttend.points,
@@ -443,7 +488,9 @@ async function checkIn(
  */
 async function maybeRewardHost(tx: Executor, event: repo.EventRow) {
   if (event.hostRewardedAt) return;
-  if ((await repo.checkedInCount(tx, event.id)) < EVENT_HOST_MIN_ATTENDEES) return;
+  // Counts attendees who do NOT run the event. Otherwise a host plus four
+  // co-hosts reaches the threshold with nobody actually attending.
+  if ((await repo.checkedInAttendeeCount(tx, event.id)) < EVENT_HOST_MIN_ATTENDEES) return;
   if (!(await repo.markHostRewarded(tx, event.id))) return;
 
   const host = await profileRepo.findUser(event.hostId);

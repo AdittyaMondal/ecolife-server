@@ -139,6 +139,45 @@ describe('marketplace pricing', () => {
   );
 
   it(
+    'refuses a delisted product, in the cart and at checkout',
+    async () => {
+      const { token, userId } = await createOnboardedUser();
+      const product = await makeProduct(10_000, 10);
+      const addressId = await makeAddress(token);
+      await call('/marketplace/cart/items', {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ productId: product.id, quantity: 1 }),
+      });
+
+      // Withdrawn after it was already in someone's cart.
+      await db.update(products).set({ isActive: false }).where(eq(products.id, product.id));
+
+      const add = await call('/marketplace/cart/items', {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ productId: product.id, quantity: 1 }),
+      });
+      expect(add.status).toBe(404);
+      expect((await json(add)).error.code).toBe('SHOP_005');
+
+      // And the cart that still holds it cannot be checked out: stock is
+      // only decremented for an active product.
+      const order = await call('/marketplace/orders', {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ offeredCoins: 0, addressId, idempotencyKey: crypto.randomUUID() }),
+      });
+      expect(order.status).toBe(422);
+      expect((await json(order)).error.code).toBe('SHOP_001');
+
+      const after = await readUser(userId);
+      expect(after?.coinsBalance).toBe(0);
+    },
+    TIMEOUT,
+  );
+
+  it(
     'refuses to add more than the stock',
     async () => {
       const { token } = await createOnboardedUser();
@@ -564,46 +603,151 @@ describe('events', () => {
   );
 
   it(
-    'pays the host once, after five distinct attendees',
+    'will not let a host pay themselves for attending their own event',
     async () => {
       const host = await createOnboardedUser();
       const event = await hostAnEvent(host.token, {
         startAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
         endAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       });
-
-      for (let i = 0; i < 5; i++) {
-        const attendee = await createOnboardedUser();
-        const reg = (
-          await json(
-            await call(`/events/${event.id}/register`, {
-              method: 'POST',
-              headers: auth(attendee.token),
+      // `[LESSON]` The farm: create an event starting now, register for it,
+      // scan your own pass, collect 200 points, repeat for a new pass id.
+      // The host check passes because you ARE the host.
+      const reg = (
+        await json(
+          await call(`/events/${event.id}/register`, { method: 'POST', headers: auth(host.token) }),
+        )
+      ).data;
+      const scan = (
+        await json(
+          await call(`/events/${event.id}/scan`, {
+            method: 'POST',
+            headers: auth(host.token),
+            body: JSON.stringify({
+              passCode: reg.pass.passCode,
+              scanClientId: crypto.randomUUID(),
             }),
-          )
-        ).data;
-        await call(`/events/${event.id}/scan`, {
-          method: 'POST',
-          headers: auth(host.token),
-          body: JSON.stringify({ passCode: reg.pass.passCode, scanClientId: crypto.randomUUID() }),
-        });
-      }
+          }),
+        )
+      ).data;
+
+      // Checked in — a host who is present belongs in their own counter...
+      expect(scan.alreadyCheckedIn).toBe(false);
+      expect(scan.checkedInCount).toBe(1);
+      // ...but paid nothing.
+      expect(scan.attendeeReward).toBeNull();
 
       const [grants] = await db
-        .select({
-          n: sql<number>`count(*)::int`,
-          points: sql<number>`coalesce(sum(points_delta),0)::int`,
-        })
+        .select({ n: sql<number>`count(*)::int` })
         .from(rewardTransactions)
         .where(
           and(
             eq(rewardTransactions.userId, host.userId),
-            eq(rewardTransactions.source, 'event_host'),
+            eq(rewardTransactions.source, 'event_attend'),
           ),
         );
-      expect(grants?.n).toBe(1);
-      expect(grants?.points).toBe(300);
+      expect(grants?.n).toBe(0);
     },
     TIMEOUT,
   );
+
+  it(
+    'refuses to check anyone in to a cancelled event',
+    async () => {
+      const host = await createOnboardedUser();
+      const attendee = await createOnboardedUser();
+      const event = await hostAnEvent(host.token, {
+        startAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+        endAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      });
+      const reg = (
+        await json(
+          await call(`/events/${event.id}/register`, {
+            method: 'POST',
+            headers: auth(attendee.token),
+          }),
+        )
+      ).data;
+      await call(`/events/${event.id}/cancel`, { method: 'POST', headers: auth(host.token) });
+
+      const res = await call(`/events/${event.id}/scan`, {
+        method: 'POST',
+        headers: auth(host.token),
+        body: JSON.stringify({ passCode: reg.pass.passCode, scanClientId: crypto.randomUUID() }),
+      });
+      // A cancelled drive did not happen, so it cannot credit attendance.
+      expect(res.status).toBe(422);
+      expect((await json(res)).error.code).toBe('EVENT_003');
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'keeps an invite_only event out of discovery',
+    async () => {
+      const host = await createOnboardedUser();
+      const stranger = await createOnboardedUser();
+      const secret = await hostAnEvent(host.token, { visibility: 'invite_only' });
+
+      const theirs = (
+        await json(
+          await call('/events?filter=upcoming&limit=50', { headers: auth(stranger.token) }),
+        )
+      ).data;
+      expect(theirs.items.some((e: { id: number }) => e.id === secret.id)).toBe(false);
+
+      const mine = (
+        await json(await call('/events?filter=hosting&limit=50', { headers: auth(host.token) }))
+      ).data;
+      expect(mine.items.some((e: { id: number }) => e.id === secret.id)).toBe(true);
+    },
+    TIMEOUT,
+  );
+
+  it('pays the host once, after five distinct attendees', async () => {
+    const host = await createOnboardedUser();
+    const event = await hostAnEvent(host.token, {
+      startAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+      endAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+
+    // Five users and five registrations in parallel; only the scans are
+    // sequential, because they are what the threshold is counting.
+    const attendees = await Promise.all(Array.from({ length: 5 }, () => createOnboardedUser()));
+    const passes = await Promise.all(
+      attendees.map(
+        async (a) =>
+          (
+            await json(
+              await call(`/events/${event.id}/register`, {
+                method: 'POST',
+                headers: auth(a.token),
+              }),
+            )
+          ).data.pass.passCode,
+      ),
+    );
+    for (const passCode of passes) {
+      await call(`/events/${event.id}/scan`, {
+        method: 'POST',
+        headers: auth(host.token),
+        body: JSON.stringify({ passCode, scanClientId: crypto.randomUUID() }),
+      });
+    }
+
+    const [grants] = await db
+      .select({
+        n: sql<number>`count(*)::int`,
+        points: sql<number>`coalesce(sum(points_delta),0)::int`,
+      })
+      .from(rewardTransactions)
+      .where(
+        and(
+          eq(rewardTransactions.userId, host.userId),
+          eq(rewardTransactions.source, 'event_host'),
+        ),
+      );
+    expect(grants?.n).toBe(1);
+    expect(grants?.points).toBe(300);
+  }, 60_000); // The heaviest test here: five accounts, five registrations, five scans.
 });

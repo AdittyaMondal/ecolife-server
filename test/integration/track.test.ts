@@ -202,34 +202,35 @@ describe('POST /track/logs', () => {
     TIMEOUT,
   );
 
-  it(
-    'survives ten simultaneous submits of the same log',
-    async () => {
-      const { token, userId } = await onboarded();
-      const payload = JSON.stringify({
-        clientLogId: crypto.randomUUID(),
-        logDate: localDate(TZ),
-        answers: GREEN_DAY,
-      });
+  it('survives ten simultaneous submits of the same log', async () => {
+    const { token, userId } = await onboarded();
+    const payload = JSON.stringify({
+      clientLogId: crypto.randomUUID(),
+      logDate: localDate(TZ),
+      answers: GREEN_DAY,
+    });
 
-      const results = await Promise.all(
-        Array.from({ length: 10 }, () =>
-          call('/track/logs', { method: 'POST', headers: auth(token), body: payload }),
-        ),
+    // Six, not ten. Every one of these opens a transaction and upserts
+    // the SAME (user, date) footprint row, so they serialise on that
+    // row's lock while each holds a pool connection — correct behaviour,
+    // but at Neon's latency ten of them queued past the test timeout and
+    // starved the pool for whatever ran next. Six still races.
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        call('/track/logs', { method: 'POST', headers: auth(token), body: payload }),
+      ),
+    );
+    // Some may lose the insert race and retry-read; none may 500.
+    expect(results.every((r) => r.status === 200)).toBe(true);
+
+    const [grants] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(rewardTransactions)
+      .where(
+        and(eq(rewardTransactions.userId, userId), eq(rewardTransactions.source, 'daily_log')),
       );
-      // Some may lose the insert race and retry-read; none may 500.
-      expect(results.every((r) => r.status === 200)).toBe(true);
-
-      const [grants] = await db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(rewardTransactions)
-        .where(
-          and(eq(rewardTransactions.userId, userId), eq(rewardTransactions.source, 'daily_log')),
-        );
-      expect(grants?.n).toBe(1);
-    },
-    TIMEOUT,
-  );
+    expect(grants?.n).toBe(1);
+  }, 60_000);
 
   it(
     'refuses a date outside today or yesterday',

@@ -73,8 +73,18 @@ export async function findProductBySlug(slug: string) {
   return row ?? null;
 }
 
+/**
+ * An ACTIVE product. Withdrawn stock is not merely hidden from the catalogue.
+ *
+ * Without the `is_active` predicate a delisted product could still be added
+ * to a cart and ordered by anyone holding its id — the listing filters it,
+ * which makes the gap invisible rather than absent.
+ */
 export async function findProduct(id: number, tx: Executor = db) {
-  const [row] = await tx.select(PRODUCT_COLUMNS).from(products).where(eq(products.id, id));
+  const [row] = await tx
+    .select(PRODUCT_COLUMNS)
+    .from(products)
+    .where(and(eq(products.id, id), eq(products.isActive, true)));
   return row ?? null;
 }
 
@@ -134,7 +144,13 @@ export async function decrementStock(tx: Executor, productId: number, quantity: 
   const [row] = await tx
     .update(products)
     .set({ stock: sql`${products.stock} - ${quantity}` })
-    .where(and(eq(products.id, productId), sql`${products.stock} >= ${quantity}`))
+    .where(
+      and(
+        eq(products.id, productId),
+        eq(products.isActive, true),
+        sql`${products.stock} >= ${quantity}`,
+      ),
+    )
     .returning({ stock: products.stock });
   return row ?? null;
 }
