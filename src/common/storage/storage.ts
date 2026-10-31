@@ -1,7 +1,7 @@
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { DomainError } from '@common/errors/domain-error.ts';
 import { env } from '@config/env.ts';
-import { Files } from 'files-sdk';
-import { neon } from 'files-sdk/neon';
 
 /**
  * Neon Object Storage (PRD-v2 §6.7). S3-compatible, and it branches with the
@@ -29,18 +29,24 @@ const PREFIX: Record<string, string> = {
   event_cover: 'event-covers',
 };
 
-let client: Files | null = null;
+/** Appendix B / PRD-v2 §6.7: 5 MiB, matching presignBodySchema's own cap. */
+export const MAX_UPLOAD_BYTES = 5_242_880;
+
+let s3: S3Client | null = null;
 
 /**
- * Lazily built, so a server with no storage configured still boots and serves
- * every other endpoint. Only the upload route fails, and it says why.
+ * The raw S3 client, used only for presigning.
+ *
+ * `forcePathStyle` is required — Neon does not support virtual-host style
+ * addressing. Credentials, endpoint and region come from the AWS-standard
+ * env vars, so nothing else is passed.
  */
-function files(): Files {
+function s3Client(): S3Client {
   if (!env.S3_BUCKET || !env.AWS_ENDPOINT_URL_S3) {
     throw new DomainError('UPLOAD_002', 'Uploads are not configured on this server.', 503);
   }
-  client ??= new Files({ adapter: neon({ bucket: env.S3_BUCKET }) });
-  return client;
+  s3 ??= new S3Client({ forcePathStyle: true });
+  return s3;
 }
 
 export type PresignInput = {
@@ -76,15 +82,42 @@ export async function presignUpload(input: PresignInput): Promise<PresignResult>
   if (!extension || !prefix) {
     throw new DomainError('UPLOAD_001', 'Unsupported upload type.', 400);
   }
+  // Belt and braces with presignBodySchema: this function is also callable
+  // from a job or a future route that does not go through that schema.
+  if (!Number.isInteger(input.sizeBytes) || input.sizeBytes < 1) {
+    throw new DomainError('UPLOAD_001', 'Declared size must be a positive integer.', 400);
+  }
+  if (input.sizeBytes > MAX_UPLOAD_BYTES) {
+    throw new DomainError('UPLOAD_001', 'That file is too large.', 400, {
+      maxBytes: MAX_UPLOAD_BYTES,
+    });
+  }
 
   const key = `${prefix}/${input.userId}/${crypto.randomUUID()}.${extension}`;
-  const uploadUrl = await files().signedUploadUrl(key, {
-    expiresIn: UPLOAD_URL_TTL_SECONDS,
-    contentType: input.contentType,
-  });
+
+  // `ContentLength` and `ContentType` are SIGNED headers, which is the point.
+  //
+  // Validating sizeBytes in the schema alone only checks what the client
+  // CLAIMS: the signed URL it got back would still accept a 5 GB body, so
+  // the declared cap bought nothing and anyone with an account could fill
+  // the bucket. Signing them means storage rejects a PUT whose actual
+  // length or type differs from the one the signature was issued for.
+  const uploadUrl = await getSignedUrl(
+    s3Client(),
+    new PutObjectCommand({
+      Bucket: env.S3_BUCKET,
+      Key: key,
+      ContentLength: input.sizeBytes,
+      ContentType: input.contentType,
+    }),
+    {
+      expiresIn: UPLOAD_URL_TTL_SECONDS,
+      signableHeaders: new Set(['content-length', 'content-type']),
+    },
+  );
 
   return {
-    uploadUrl: typeof uploadUrl === 'string' ? uploadUrl : uploadUrl.url,
+    uploadUrl,
     publicUrl: objectUrl(key),
     expiresInSeconds: UPLOAD_URL_TTL_SECONDS,
   };

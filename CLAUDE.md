@@ -305,12 +305,14 @@ Hard-won; do not rediscover them.
   `DATABASE_URL_UNPOOLED`. Back `.env` up first. They also downgrade `sslmode=verify-full`
   to `sslmode=require` — there is a test that catches this, and §6's note on `verify-full`
   says why it matters. `sed -i '' 's/sslmode=require/sslmode=verify-full/g' .env`.
-- **`files-sdk` needs the AWS SDK hoisted.** It declares `@aws-sdk/*` as *peer* dependencies,
-  and pnpm's isolated layout does not link a peer into the dependent's own folder, so
-  `import '@aws-sdk/client-s3'` fails from inside `files-sdk` even though it is installed.
-  `publicHoistPattern` in `pnpm-workspace.yaml` fixes it. Separately, Bun resolves a script
-  outside the project from its OWN global cache — run storage scripts from the repo root or
-  the import fails for a different reason that looks identical.
+- **Bun resolves a script OUTSIDE the project from its own global cache**, not from
+  `node_modules`. A one-off storage or database script placed in a temp directory fails to
+  import a package that is plainly installed. Run such scripts from the repo root.
+- **A package whose deps are `peerDependencies` needs hoisting under pnpm.** pnpm's isolated
+  layout does not link a peer into the dependent's own folder, so the import fails from inside
+  that package even though it is installed at the root. `publicHoistPattern` in
+  `pnpm-workspace.yaml` is the fix. (`files-sdk` hit this; we now use `@aws-sdk/client-s3`
+  directly and need no hoisting.)
 - **Postgres is 18.6**, though the PRD says 16. Neon's current default. Everything the PRD
   needs — native enums, partial unique indexes, window functions, triggers — is present.
 - **`pnpm` is 12.5.1**, not the `10.x` in PRD §9.2. Pinned to what is installed; pinning 10.x

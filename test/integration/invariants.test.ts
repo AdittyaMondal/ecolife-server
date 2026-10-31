@@ -250,6 +250,43 @@ describe('offline replay safety', () => {
   );
 
   it(
+    'rejects a second log for the same user and date, whatever the client id',
+    async () => {
+      // This is the constraint that bounds timezone abuse. `users.timezone` is
+      // self-declared, so flipping it between submits can reach one calendar
+      // date early. It cannot produce MORE logs, because a date can only ever
+      // hold one — so there is no sustained farming rate, only a date reached
+      // sooner than it otherwise would have been.
+      await db
+        .insert(dailyLogs)
+        .values({
+          userId,
+          logDate: '2026-10-09',
+          clientLogId: crypto.randomUUID(),
+          answeredCount: 5,
+        })
+        .execute();
+
+      let err: unknown;
+      try {
+        await db
+          .insert(dailyLogs)
+          .values({
+            userId,
+            logDate: '2026-10-09',
+            clientLogId: crypto.randomUUID(),
+            answeredCount: 5,
+          })
+          .execute();
+      } catch (e) {
+        err = e;
+      }
+      expect(constraintOf(err)).toBe('daily_log_user_date_unq');
+    },
+    TIMEOUT,
+  );
+
+  it(
     'rejects two footprints for the same user and date',
     async () => {
       const row = {

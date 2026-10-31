@@ -4,12 +4,3 @@
 # platform binary. Allowed so `pnpm install` exits 0 in CI.
 allowBuilds:
   esbuild: true
-
-# files-sdk declares the AWS S3 packages as PEER dependencies, and pnpm's
-# isolated layout does not link a peer into the dependent's own folder — so
-# `import '@aws-sdk/client-s3'` from inside files-sdk fails to resolve even
-# though the package is installed at the root. Hoisting just these makes the
-# Neon object-storage adapter work without flattening node_modules wholesale.
-publicHoistPattern:
-  - '@aws-sdk/*'
-  - '@smithy/*'
