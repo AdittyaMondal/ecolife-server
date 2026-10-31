@@ -18,6 +18,7 @@
     "test": "bun test",
     "migration:generate": "bun --bun drizzle-kit generate",
     "migration:apply": "bun src/database/migrate.ts",
+    "seed": "bun src/database/seeds/seed.ts",
     "db:studio": "bun --bun drizzle-kit studio",
     "gen:openapi": "bun run scripts/gen-openapi.ts",
     "gen:openapi:check": "bun run scripts/gen-openapi.ts --check",
