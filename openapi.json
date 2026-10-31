@@ -3577,8 +3577,8 @@
               }
             }
           },
-          "501": {
-            "description": "Not implemented yet",
+          "401": {
+            "description": "Not authenticated",
             "content": {
               "application/json": {
                 "schema": {
