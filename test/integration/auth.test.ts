@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
+import { freshIpHeaders } from '@common/testing/client-ip.ts';
 import { db } from '@database/client.ts';
 import {
   organizationMembers,
@@ -21,10 +22,19 @@ const PW = 'correct horse battery staple';
 const BUCKET_CEILING = 50;
 const email = () => `authtest-${crypto.randomUUID()}@example.test`;
 
+/**
+ * Every request asserts its OWN client IP. Without this the whole suite
+ * shares one loopback rate-limit bucket and exceeds /auth/register's limit
+ * of 10 per 15 minutes. See src/common/testing/client-ip.ts.
+ */
 const call = (path: string, init: RequestInit = {}) =>
   app.request(`/api/v1${path}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
+    headers: {
+      'content-type': 'application/json',
+      ...freshIpHeaders(),
+      ...(init.headers ?? {}),
+    },
   });
 
 type Envelope = {
