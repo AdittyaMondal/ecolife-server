@@ -1,3 +1,4 @@
+import { DomainError } from '@common/errors/domain-error.ts';
 import { errorFilter, notFoundFilter } from '@common/filters/error-filter.ts';
 import { createModule } from '@common/openapi/factory.ts';
 import { env } from '@config/env.ts';
@@ -87,21 +88,36 @@ app.doc31('/openapi.json', {
  * `/openapi.json` serves — so it can never describe an endpoint that does not
  * exist.
  *
- * NOT REGISTERED IN PRODUCTION. The renderer is a third-party bundle, and
- * serving it from this origin would put a CDN inside our own trust boundary:
- * a compromised bundle would run with access to anything same-origin. A
- * developer convenience is not worth that, so production has no /docs route at
- * all — `docs/api-reference.md` and `/openapi.json` cover the same need
- * without executing anyone else's code.
+ * Always on outside production; in production only when ENABLE_API_DOCS=true.
+ *
+ * The renderer is a third-party bundle, so serving it from this origin puts a
+ * CDN inside our trust boundary — a compromised bundle would run with
+ * same-origin access. Two things make that an acceptable trade when the flag
+ * is deliberately set: the script is pinned by SRI hash, so the browser
+ * refuses anything that does not match byte-for-byte, and API_DOCS_TOKEN can
+ * gate the page so it is not simply public.
+ *
+ * `docs/api-reference.md` and `/openapi.json` remain the zero-trust options:
+ * same content, nobody else's code.
  *
  * Where it IS registered, the script is pinned by version AND by SRI hash, so
  * the browser refuses a bundle that does not match byte-for-byte. Regenerate
  * the hash if the version changes:
  *   curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
  */
-if (env.NODE_ENV !== 'production') {
-  app.get('/docs', (c) =>
-    c.html(`<!doctype html>
+if (env.NODE_ENV !== 'production' || env.ENABLE_API_DOCS) {
+  app.get('/docs', (c) => {
+    // When a token is configured the page is not public. Compared with a
+    // constant-time check so the token cannot be guessed a character at a time.
+    if (env.API_DOCS_TOKEN) {
+      const given = c.req.query('token') ?? '';
+      const expected = env.API_DOCS_TOKEN;
+      const ok =
+        given.length === expected.length &&
+        crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+      if (!ok) throw new DomainError('DOCS_001', 'Not found.', 404);
+    }
+    return c.html(`<!doctype html>
   <html lang="en">
     <head>
       <meta charset="utf-8" />
@@ -123,8 +139,8 @@ if (env.NODE_ENV !== 'production') {
         crossorigin="anonymous"
       ></script>
     </body>
-  </html>`),
-  );
+  </html>`);
+  });
 }
 
 app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {

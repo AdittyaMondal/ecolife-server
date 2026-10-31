@@ -2,7 +2,7 @@ import { DomainError } from '@common/errors/domain-error.ts';
 import { env } from '@config/env.ts';
 import { db } from '@database/client.ts';
 import { rateLimits } from '@database/schema/index.ts';
-import { sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Context, MiddlewareHandler } from 'hono';
 
 /**
@@ -149,4 +149,51 @@ export async function consumeFailedAttempt(
   const ip = clientIp(c);
   if (ip) await consume(`idip:${id}|${ip}`, bucket);
   await consume(`id:${id}`, { ...bucket, name: `${bucket.name}-id`, limit: bucket.limit * 5 });
+}
+
+/**
+ * Read-only: is this bucket already full? Does NOT increment.
+ *
+ * Needed because the identifier buckets are charged only on failure, so
+ * nothing would otherwise consult them before the next password check. Where
+ * no client IP is available the per-IP limiter skips entirely, and without
+ * this an attacker could guess without limit.
+ *
+ * The hard pre-check uses the identifier+IP bucket only. Checking the loose
+ * identifier-wide bucket here would hand back the targeted lockout that
+ * splitting them was meant to remove.
+ */
+export async function isExhausted(subject: string, bucket: Bucket): Promise<boolean> {
+  const start = windowStart(bucket.windowSeconds);
+  const [row] = await db
+    .select({ count: rateLimits.count })
+    .from(rateLimits)
+    .where(
+      and(
+        eq(rateLimits.subject, subject),
+        eq(rateLimits.bucket, bucket.name),
+        eq(rateLimits.windowStart, start),
+      ),
+    );
+  return (row?.count ?? 0) >= bucket.limit;
+}
+
+/** The identifier+IP bucket key, shared by the pre-check and the charge. */
+export function identifierIpSubject(identifier: string, ip: string | null): string | null {
+  return ip ? `idip:${identifier.toLowerCase()}|${ip}` : null;
+}
+
+/** Throws 429 when this attacker has already burned their attempts on this account. */
+export async function assertNotLockedOut(
+  c: Context,
+  identifier: string,
+  bucket: Bucket,
+): Promise<void> {
+  const subject = identifierIpSubject(identifier, clientIp(c));
+  if (!subject) return;
+  if (await isExhausted(subject, bucket)) {
+    throw new DomainError('GEN_429', 'Too many attempts. Please wait and try again.', 429, {
+      retryAfterSeconds: bucket.windowSeconds,
+    });
+  }
 }

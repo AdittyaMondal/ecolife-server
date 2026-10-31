@@ -5,7 +5,6 @@ import {
   organizations,
   rateLimits,
   sessions,
-  users,
 } from '@database/schema/index.ts';
 import { and, eq, like, ne, sql } from 'drizzle-orm';
 import { app } from '../../src/app.ts';
@@ -436,6 +435,61 @@ describe('rotation is atomic under concurrency', () => {
         .from(sessions)
         .where(and(eq(sessions.userId, userId), ne(sessions.familyId, familyId)));
       expect(others.some((r) => r.revokedAt === null)).toBe(true);
+    },
+    TIMEOUT,
+  );
+});
+
+describe('brute force is blocked even when the guess is right', () => {
+  it(
+    'rejects a correct password once that attacker has spent the account bucket',
+    async () => {
+      const { assertNotLockedOut, consumeFailedAttempt, isExhausted, identifierIpSubject } =
+        await import('@common/middleware/rate-limit.ts');
+      await db.execute(sql`delete from rate_limits`);
+
+      const victim = `victim-${crypto.randomUUID()}@example.test`;
+      const bucket = { name: 'auth-strict', limit: 10, windowSeconds: 900 };
+
+      // One attacker, one victim account.
+      const attacker = {
+        req: { header: () => undefined },
+        env: { requestIP: () => ({ address: '203.0.113.9' }) },
+      } as never;
+
+      for (let i = 0; i < bucket.limit; i++) {
+        await consumeFailedAttempt(attacker, victim, bucket);
+      }
+
+      const subject = identifierIpSubject(victim, '203.0.113.9');
+      expect(subject).not.toBeNull();
+      expect(await isExhausted(subject as string, bucket)).toBe(true);
+
+      // The regression this guards: charging only on failure removed the
+      // pre-check, so the eleventh guess — including a CORRECT one — would have
+      // sailed through. A right answer reached by brute force is still brute
+      // force.
+      let blocked = false;
+      try {
+        await assertNotLockedOut(attacker, victim, bucket);
+      } catch {
+        blocked = true;
+      }
+      expect(blocked).toBe(true);
+
+      // ...and the victim signing in from their own machine is unaffected,
+      // which is the whole reason the bucket is keyed on identifier+IP.
+      const elsewhere = {
+        req: { header: () => undefined },
+        env: { requestIP: () => ({ address: '198.51.100.4' }) },
+      } as never;
+      let victimBlocked = false;
+      try {
+        await assertNotLockedOut(elsewhere, victim, bucket);
+      } catch {
+        victimBlocked = true;
+      }
+      expect(victimBlocked).toBe(false);
     },
     TIMEOUT,
   );
