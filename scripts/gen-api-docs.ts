@@ -93,7 +93,7 @@ for (const [path, ops] of Object.entries(spec.paths)) {
     opCount++;
     for (const tag of op.tags ?? ['untagged']) {
       if (!byTag.has(tag)) byTag.set(tag, []);
-      byTag.get(tag)!.push({ method: method.toUpperCase(), path, op });
+      byTag.get(tag)?.push({ method: method.toUpperCase(), path, op });
     }
   }
 }
@@ -169,7 +169,7 @@ p(
 );
 
 for (const tag of tags) {
-  const n = byTag.get(tag)!.length;
+  const n = byTag.get(tag)?.length;
   p(
     `- [${tag}](#${slug(tag)}) — ${n} operation${n === 1 ? '' : 's'}${
       tagDesc.get(tag) ? `. ${tagDesc.get(tag)}` : ''
@@ -184,8 +184,8 @@ for (const tag of tags) {
   if (tagDesc.get(tag)) p(`${tagDesc.get(tag)}`, '');
 
   const items = byTag
-    .get(tag)!
-    .sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
+    .get(tag)
+    ?.sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
 
   p('| | Endpoint | Summary |', '|---|---|---|');
   for (const { method, path, op } of items) {

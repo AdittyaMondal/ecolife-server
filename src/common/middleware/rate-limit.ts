@@ -1,7 +1,8 @@
 import { DomainError } from '@common/errors/domain-error.ts';
+import { env } from '@config/env.ts';
 import { db } from '@database/client.ts';
 import { rateLimits } from '@database/schema/index.ts';
-import { and, eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import type { Context, MiddlewareHandler } from 'hono';
 
 /**
@@ -22,11 +23,40 @@ export const BUCKETS = {
   default: { name: 'default', limit: 300, windowSeconds: 60 },
 } as const satisfies Record<string, Bucket>;
 
-/** The socket address. Deliberately ignores every proxy header. */
-export function clientIp(c: Context): string {
+/**
+ * The client's IP, or null when it genuinely cannot be established.
+ *
+ * Returning a shared `'unknown'` string, as the first version did, is worse
+ * than returning nothing: every anonymous caller lands in ONE bucket, so a
+ * single attacker can exhaust it and lock out every other unauthenticated
+ * user. A DoS lever dressed as a rate limit.
+ *
+ * `x-forwarded-for` is attacker-controlled unless we operate the proxy that
+ * wrote it, so it is read ONLY when TRUSTED_PROXY_HOPS says how many entries
+ * we actually appended — and then from the RIGHT, because the leftmost
+ * entries are whatever the client sent (CLAUDE.md §4.1.1).
+ */
+export function clientIp(c: Context): string | null {
+  const hops = env.TRUSTED_PROXY_HOPS;
+  if (hops > 0) {
+    const chain = (c.req.header('x-forwarded-for') ?? '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean);
+    const candidate = chain.length >= hops ? chain[chain.length - hops] : undefined;
+    if (candidate && isIpLike(candidate)) return candidate;
+  }
+
   const info = c.env as { requestIP?: (r: Request) => { address?: string } | null } | undefined;
-  return info?.requestIP?.(c.req.raw)?.address ?? 'unknown';
+  return info?.requestIP?.(c.req.raw)?.address ?? null;
 }
+
+/** Cheap shape check, so a forged header cannot inject an arbitrary bucket key. */
+function isIpLike(value: string): boolean {
+  return /^[0-9a-fA-F:.]{3,45}$/.test(value);
+}
+
+let warnedNoIp = false;
 
 function windowStart(seconds: number): Date {
   const ms = seconds * 1000;
@@ -61,21 +91,62 @@ export async function consume(subject: string, bucket: Bucket): Promise<void> {
   }
 }
 
-/** Per-IP limiter, for routes with no authenticated user yet. */
+/**
+ * Per-IP limiter for routes with no authenticated user yet.
+ *
+ * With no determinable IP this does NOT fall back to a shared bucket — it
+ * skips, loudly and once. On the auth routes the per-identifier bucket still
+ * applies, so accounts stay protected; a shared bucket would protect nothing
+ * and hand an attacker a lockout primitive.
+ */
 export function rateLimitByIp(bucket: Bucket): MiddlewareHandler {
   return async (c, next) => {
-    await consume(`ip:${clientIp(c)}`, bucket);
+    await consumeForIp(c, bucket);
     await next();
   };
 }
 
+/** Consumes the per-IP bucket when an IP is known; otherwise warns once. */
+export async function consumeForIp(c: Context, bucket: Bucket): Promise<void> {
+  const ip = clientIp(c);
+  if (!ip) {
+    if (!warnedNoIp) {
+      warnedNoIp = true;
+      console.warn(
+        'rate-limit: no client IP available — per-IP limiting is INACTIVE. ' +
+          'Set TRUSTED_PROXY_HOPS if this server runs behind a proxy.',
+      );
+    }
+    return;
+  }
+  await consume(`ip:${ip}`, bucket);
+}
+
 /**
- * A second bucket keyed on the submitted identifier.
+ * Buckets keyed on the submitted identifier, consumed ONLY on a failed
+ * attempt.
  *
- * Per-IP alone does not stop a distributed attempt on one account, and
- * per-identifier alone does not stop one host spraying many accounts. Login
- * needs both.
+ * The first version counted every attempt against `id:<email>` alone, which
+ * handed anyone who knew your address a targeted lockout: ten bad guesses
+ * from any machine and the real user is blocked for fifteen minutes. Two
+ * changes fix that without giving up the protection:
+ *
+ *   identifier+IP   tight. One attacker fills their own bucket and nobody
+ *                   else's, so the victim signing in from elsewhere is fine.
+ *   identifier      loose (5x). A genuinely distributed attack on one account
+ *                   still gets stopped; the cost of locking that account is
+ *                   accepted, because at that point it IS under attack.
+ *
+ * Successful logins consume neither, so a user who types their password
+ * correctly is never rate limited by someone else's failures.
  */
-export async function consumeForIdentifier(identifier: string, bucket: Bucket): Promise<void> {
-  await consume(`id:${identifier.toLowerCase()}`, bucket);
+export async function consumeFailedAttempt(
+  c: Context,
+  identifier: string,
+  bucket: Bucket,
+): Promise<void> {
+  const id = identifier.toLowerCase();
+  const ip = clientIp(c);
+  if (ip) await consume(`idip:${id}|${ip}`, bucket);
+  await consume(`id:${id}`, { ...bucket, name: `${bucket.name}-id`, limit: bucket.limit * 5 });
 }
