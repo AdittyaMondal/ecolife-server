@@ -73,15 +73,22 @@ app.doc31('/openapi.json', {
       'Carbon footprint tracker. Every response uses the envelope ' +
       '`{ status, data, error }`. Clients branch on `error.code`, never on `error.message`.',
   },
+  // ORIGINS ONLY. Every path in this document is already absolute from the
+  // root (`/api/v1/health`, not `/health`), because the routers are mounted at
+  // /api/v1 and the generated paths record the mounted path. A server URL
+  // ending in /api/v1 is therefore concatenated into /api/v1/api/v1/health,
+  // which is what the "try it" button on /docs was actually requesting.
+  // `new URL(...).origin` also makes PUBLIC_API_URL forgiving of a trailing
+  // slash or a pasted /api/v1 suffix.
   servers: [
-    // The deployment first when it is configured, so the "try it" button on
-    // /docs calls the real host rather than the reader's own machine.
+    // The deployment first when configured, so "try it" calls the real host
+    // rather than the reader's own machine.
     ...(env.PUBLIC_API_URL
-      ? [{ url: `${env.PUBLIC_API_URL.replace(/\/$/, '')}/api/v1`, description: 'deployment' }]
+      ? [{ url: new URL(env.PUBLIC_API_URL).origin, description: 'deployment' }]
       : []),
-    { url: 'http://localhost:4000/api/v1', description: 'local server' },
+    { url: 'http://localhost:4000', description: 'local server' },
     {
-      url: 'http://localhost:4010/api/v1',
+      url: 'http://localhost:4010',
       description: 'Prism mock (examples from this document)',
     },
   ],
