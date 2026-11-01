@@ -256,9 +256,8 @@ export async function members(
   return {
     organization: serialise(org, false),
     items: rows.map((r) => {
-      // Respect privacy: If member has opted out (shareFootprint === false),
-      // or if caller is a regular member (not an owner/admin), detailed carbon numbers are redacted.
-      const canViewFootprint = isOwner && (r.shareFootprint || r.id === userId);
+      // Respect privacy: If caller is the member themselves, or if caller is an owner and member shares footprint
+      const canViewFootprint = r.id === userId || (isOwner && r.shareFootprint);
 
       return {
         user: { id: r.id, name: r.name, avatarUrl: r.avatarUrl, city: r.city },
