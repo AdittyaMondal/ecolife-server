@@ -23,9 +23,9 @@ import {
   adminSettingsRoutes,
 } from '@modules/revenue/revenue.routes.ts';
 import { profileRoutes, publicUserRoutes } from '@modules/profile/profile.routes.ts';
+import { notificationRoutes } from '@modules/notifications/notifications.routes.ts';
 import {
   carbonRoutes,
-  notificationRoutes,
   referenceRoutes,
   uploadRoutes,
 } from '@modules/reference/reference.routes.ts';

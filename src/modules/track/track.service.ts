@@ -16,6 +16,7 @@ import {
 } from '@common/rewards/rewards.ts';
 import { addDays, daysBetween, localDate, localHour, zonedIso } from '@common/time.ts';
 import { db } from '@database/client.ts';
+import { sendPredefinedNotification } from '@modules/notifications/fcm.service.ts';
 import * as profileRepo from '@modules/profile/profile.repository.ts';
 import * as reference from '@modules/reference/reference.repository.ts';
 import * as repo from './track.repository.ts';
@@ -294,6 +295,13 @@ export async function submit(userId: number, body: SubmitBody) {
           grant: { pointsDelta: 0, coinsDelta: 0, reasons: [] },
           wallet: { pointsTotal: user.pointsTotal, coinsBalance: user.coinsBalance },
         };
+
+    // Predefined FCM notification dispatch on coin reward
+    if (reward.grant.coinsDelta > 0) {
+      sendPredefinedNotification(userId, 'COINS_EARNED', {
+        coins: String(reward.grant.coinsDelta),
+      }).catch((err) => console.error('[FCM] Coins earned push failed:', err));
+    }
 
     return {
       logId: log.id,
