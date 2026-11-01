@@ -36,7 +36,7 @@ export const pool = new Pool({
    */
   max: env.NODE_ENV === 'test' ? 30 : 10,
   idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 10_000,
+  connectionTimeoutMillis: env.NODE_ENV === 'test' ? 30_000 : 10_000,
   allowExitOnIdle: env.NODE_ENV === 'test',
 });
 

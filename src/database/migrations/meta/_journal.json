@@ -85,6 +85,13 @@
       "when": 1793505003429,
       "tag": "0011_furry_quicksilver",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793507590394,
+      "tag": "0012_glamorous_purple_man",
+      "breakpoints": true
     }
   ]
 }

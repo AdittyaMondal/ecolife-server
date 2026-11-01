@@ -4916,6 +4916,619 @@
           "expected"
         ]
       },
+      "SystemSettings": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "defaultCommissionRateBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5000,
+            "example": 1000,
+            "description": "Commission in basis points (1000 = 10%)"
+          },
+          "defaultCommissionPercent": {
+            "type": "number",
+            "example": 10,
+            "description": "Calculated commission percentage"
+          },
+          "coinRedemptionFeeBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2000,
+            "example": 200,
+            "description": "Fee on coin redemptions in bps (200 = 2%)"
+          },
+          "coinRedemptionFeePercent": {
+            "type": "number",
+            "example": 2,
+            "description": "Calculated coin fee percentage"
+          },
+          "coinsPerRupee": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "example": 10,
+            "description": "10 coins = 1 Rupee"
+          },
+          "coinValuePaise": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "example": 10,
+            "description": "Value of 1 coin in paise"
+          },
+          "maxDiscountPercent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 20,
+            "description": "Max allowable coin redemption %"
+          },
+          "payoutHoldDays": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 7,
+            "description": "Settlement hold period in days"
+          },
+          "updatedBy": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "example": 1
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-01T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "defaultCommissionRateBps",
+          "defaultCommissionPercent",
+          "coinRedemptionFeeBps",
+          "coinRedemptionFeePercent",
+          "coinsPerRupee",
+          "coinValuePaise",
+          "maxDiscountPercent",
+          "payoutHoldDays",
+          "updatedBy",
+          "updatedAt"
+        ]
+      },
+      "UpdateSystemSettingsBody": {
+        "type": "object",
+        "properties": {
+          "defaultCommissionRateBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5000
+          },
+          "coinRedemptionFeeBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2000
+          },
+          "coinsPerRupee": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "coinValuePaise": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "maxDiscountPercent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "payoutHoldDays": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SellerCommissionOverride": {
+        "type": "object",
+        "properties": {
+          "sellerOrgId": {
+            "type": "integer",
+            "example": 42
+          },
+          "sellerName": {
+            "type": "string",
+            "example": "GreenRoot Organics"
+          },
+          "commissionRateBps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "example": 800
+          },
+          "commissionPercent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "example": 8
+          },
+          "effectiveCommissionRateBps": {
+            "type": "integer",
+            "example": 800
+          },
+          "effectiveCommissionPercent": {
+            "type": "number",
+            "example": 8
+          }
+        },
+        "required": [
+          "sellerOrgId",
+          "sellerName",
+          "commissionRateBps",
+          "commissionPercent",
+          "effectiveCommissionRateBps",
+          "effectiveCommissionPercent"
+        ]
+      },
+      "SellerCommissionOverrideBody": {
+        "type": "object",
+        "properties": {
+          "commissionRateBps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 5000,
+            "example": 800,
+            "description": "Seller override in basis points (800 = 8%), or null to inherit global default"
+          }
+        },
+        "required": [
+          "commissionRateBps"
+        ]
+      },
+      "RevenueAnalytics": {
+        "type": "object",
+        "properties": {
+          "grossMerchandiseValuePaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "totalCashCollectedPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "totalCoinDiscountPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "totalCoinsRedeemed": {
+            "type": "integer",
+            "example": 1250
+          },
+          "platformRevenuePaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "platformSalesCommissionPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "platformCoinFeesPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "totalSellerPayoutsPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "pendingSellerPayoutsPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "settledSellerPayoutsPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "netPlatformCashFlowPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "monthlyBreakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "month": {
+                  "type": "string",
+                  "example": "2026-10"
+                },
+                "grossPaise": {
+                  "type": "integer",
+                  "example": 24000,
+                  "description": "Integer paise. Never a float. 24000 = ₹240.00"
+                },
+                "cashPaise": {
+                  "type": "integer",
+                  "example": 24000,
+                  "description": "Integer paise. Never a float. 24000 = ₹240.00"
+                },
+                "coinValuePaise": {
+                  "type": "integer",
+                  "example": 24000,
+                  "description": "Integer paise. Never a float. 24000 = ₹240.00"
+                },
+                "commissionPaise": {
+                  "type": "integer",
+                  "example": 24000,
+                  "description": "Integer paise. Never a float. 24000 = ₹240.00"
+                },
+                "payoutPaise": {
+                  "type": "integer",
+                  "example": 24000,
+                  "description": "Integer paise. Never a float. 24000 = ₹240.00"
+                },
+                "orderCount": {
+                  "type": "integer",
+                  "example": 25
+                }
+              },
+              "required": [
+                "month",
+                "grossPaise",
+                "cashPaise",
+                "coinValuePaise",
+                "commissionPaise",
+                "payoutPaise",
+                "orderCount"
+              ]
+            }
+          }
+        },
+        "required": [
+          "grossMerchandiseValuePaise",
+          "totalCashCollectedPaise",
+          "totalCoinDiscountPaise",
+          "totalCoinsRedeemed",
+          "platformRevenuePaise",
+          "platformSalesCommissionPaise",
+          "platformCoinFeesPaise",
+          "totalSellerPayoutsPaise",
+          "pendingSellerPayoutsPaise",
+          "settledSellerPayoutsPaise",
+          "netPlatformCashFlowPaise",
+          "monthlyBreakdown"
+        ]
+      },
+      "OrderSettlement": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 101
+          },
+          "orderId": {
+            "type": "integer",
+            "example": 55
+          },
+          "orderNumber": {
+            "type": "string",
+            "example": "ECO-2026-00042"
+          },
+          "orderItemId": {
+            "type": "integer",
+            "example": 72
+          },
+          "productName": {
+            "type": "string",
+            "example": "Bamboo Toothbrush (Pack of 4)"
+          },
+          "sellerOrgId": {
+            "type": "integer",
+            "example": 12
+          },
+          "sellerName": {
+            "type": "string",
+            "example": "EcoLiving India"
+          },
+          "saleAmountPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "coinsUsed": {
+            "type": "integer",
+            "example": 100
+          },
+          "coinValuePaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "cashPaidPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "commissionRateBps": {
+            "type": "integer",
+            "example": 1000
+          },
+          "salesCommissionPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "coinFeeRateBps": {
+            "type": "integer",
+            "example": 200
+          },
+          "coinFeePaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "platformCommissionPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "sellerPayoutPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "settled",
+              "cancelled"
+            ],
+            "example": "pending"
+          },
+          "payoutId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "example": null
+          },
+          "settledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": null
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-01T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "orderId",
+          "orderNumber",
+          "orderItemId",
+          "productName",
+          "sellerOrgId",
+          "sellerName",
+          "saleAmountPaise",
+          "coinsUsed",
+          "coinValuePaise",
+          "cashPaidPaise",
+          "commissionRateBps",
+          "salesCommissionPaise",
+          "coinFeeRateBps",
+          "coinFeePaise",
+          "platformCommissionPaise",
+          "sellerPayoutPaise",
+          "status",
+          "payoutId",
+          "settledAt",
+          "createdAt"
+        ]
+      },
+      "SellerPayout": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 10
+          },
+          "payoutNumber": {
+            "type": "string",
+            "example": "PAY-2026-00001"
+          },
+          "sellerOrgId": {
+            "type": "integer",
+            "example": 12
+          },
+          "sellerName": {
+            "type": "string",
+            "example": "EcoLiving India"
+          },
+          "totalAmountPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "settlementCount": {
+            "type": "integer",
+            "example": 5
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed"
+            ],
+            "example": "completed"
+          },
+          "referenceNote": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "Bank NEFT Ref: N123456789"
+          },
+          "processedBy": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "example": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-01T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "payoutNumber",
+          "sellerOrgId",
+          "sellerName",
+          "totalAmountPaise",
+          "settlementCount",
+          "status",
+          "referenceNote",
+          "processedBy",
+          "createdAt"
+        ]
+      },
+      "CreatePayoutBody": {
+        "type": "object",
+        "properties": {
+          "sellerOrgId": {
+            "type": "integer",
+            "example": 12
+          },
+          "settlementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "referenceNote": {
+            "type": "string",
+            "example": "Monthly disbursement via UPI/NEFT"
+          }
+        },
+        "required": [
+          "sellerOrgId"
+        ]
+      },
+      "SettlementLedgerEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 501
+          },
+          "settlementId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "example": 101
+          },
+          "orderId": {
+            "type": "integer",
+            "example": 55
+          },
+          "orderNumber": {
+            "type": "string",
+            "example": "ECO-2026-00042"
+          },
+          "orderItemId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "example": 72
+          },
+          "sellerOrgId": {
+            "type": "integer",
+            "example": 12
+          },
+          "sellerName": {
+            "type": "string",
+            "example": "EcoLiving India"
+          },
+          "transactionType": {
+            "type": "string",
+            "enum": [
+              "sale_commission",
+              "coin_subsidy",
+              "coin_fee",
+              "seller_payout"
+            ],
+            "example": "sale_commission"
+          },
+          "amountPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "settled",
+              "cancelled"
+            ],
+            "example": "pending"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "example": "order:55:item:72:sale_commission"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "Platform 10% commission on item 72"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-01T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "settlementId",
+          "orderId",
+          "orderNumber",
+          "orderItemId",
+          "sellerOrgId",
+          "sellerName",
+          "transactionType",
+          "amountPaise",
+          "status",
+          "idempotencyKey",
+          "note",
+          "createdAt"
+        ]
+      },
       "Notification": {
         "type": "object",
         "properties": {
@@ -13308,6 +13921,854 @@
           },
           "422": {
             "description": "Domain rule violation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/settings": {
+      "get": {
+        "tags": [
+          "admin-revenue"
+        ],
+        "summary": "Get global economy and commission settings",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Global system settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SystemSettings"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "admin-revenue"
+        ],
+        "summary": "Update global economy and commission settings",
+        "description": "Configures sales commission %, coin fee %, coin-to-rupee rate, and max coin redemption discount %.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSystemSettingsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated system settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SystemSettings"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/settings/sellers/{id}/commission": {
+      "get": {
+        "tags": [
+          "admin-revenue"
+        ],
+        "summary": "Get seller commission override",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seller commission override",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SellerCommissionOverride"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin-revenue"
+        ],
+        "summary": "Set or clear seller commission override",
+        "description": "Set `commissionRateBps: null` to revert to global platform default.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellerCommissionOverrideBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated seller commission override",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SellerCommissionOverride"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/revenue/analytics": {
+      "get": {
+        "tags": [
+          "admin-revenue"
+        ],
+        "summary": "Platform revenue, GMV, coin liability, and payout summary",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revenue analytics summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/RevenueAnalytics"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/revenue/settlements": {
+      "get": {
+        "tags": [
+          "admin-revenue"
+        ],
+        "summary": "List order settlements",
+        "description": "Line-item breakdown of sales, coin subsidies, platform commissions, and seller payouts.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "12"
+            },
+            "required": false,
+            "name": "sellerOrgId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "settled",
+                "cancelled"
+              ],
+              "example": "pending"
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order settlements",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/OrderSettlement"
+                          }
+                        },
+                        "pageInfo": {
+                          "$ref": "#/components/schemas/PageInfo"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "pageInfo"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/revenue/payouts": {
+      "get": {
+        "tags": [
+          "admin-revenue"
+        ],
+        "summary": "List seller payout records",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "12"
+            },
+            "required": false,
+            "name": "sellerOrgId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seller payouts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/SellerPayout"
+                          }
+                        },
+                        "pageInfo": {
+                          "$ref": "#/components/schemas/PageInfo"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "pageInfo"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin-revenue"
+        ],
+        "summary": "Disburse pending settlements to seller",
+        "description": "Creates a payout batch and marks associated settlements as settled.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePayoutBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Payout disbursed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SellerPayout"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/revenue/ledger": {
+      "get": {
+        "tags": [
+          "admin-revenue"
+        ],
+        "summary": "Immutable transaction ledger journal",
+        "description": "Double-entry style audit log for commissions, coin subsidies, fees, and payouts.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "12"
+            },
+            "required": false,
+            "name": "sellerOrgId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sale_commission",
+                "coin_subsidy",
+                "coin_fee",
+                "seller_payout"
+              ],
+              "example": "sale_commission"
+            },
+            "required": false,
+            "name": "transactionType",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "orderId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Settlement ledger entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/SettlementLedgerEntry"
+                          }
+                        },
+                        "pageInfo": {
+                          "$ref": "#/components/schemas/PageInfo"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "pageInfo"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
             "content": {
               "application/json": {
                 "schema": {

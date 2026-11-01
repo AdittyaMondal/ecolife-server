@@ -18,6 +18,10 @@ import {
   adminOrganizationRoutes,
   organizationRoutes,
 } from '@modules/organizations/organizations.routes.ts';
+import {
+  adminRevenueRoutes,
+  adminSettingsRoutes,
+} from '@modules/revenue/revenue.routes.ts';
 import { profileRoutes, publicUserRoutes } from '@modules/profile/profile.routes.ts';
 import {
   carbonRoutes,
@@ -67,6 +71,8 @@ app.route('/api/v1/addresses', addressRoutes);
 app.route('/api/v1/events', eventRoutes);
 app.route('/api/v1/organizations', organizationRoutes);
 app.route('/api/v1/admin/organizations', adminOrganizationRoutes);
+app.route('/api/v1/admin/settings', adminSettingsRoutes);
+app.route('/api/v1/admin/revenue', adminRevenueRoutes);
 app.route('/api/v1/notifications', notificationRoutes);
 app.route('/api/v1/uploads', uploadRoutes);
 app.route('/api/v1/carbon', carbonRoutes);
