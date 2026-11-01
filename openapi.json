@@ -5529,45 +5529,112 @@
           "createdAt"
         ]
       },
+      "PushTokenBody": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 10,
+            "example": "f-abc123xyz...",
+            "description": "FCM device token"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "android",
+              "ios"
+            ],
+            "default": "android",
+            "example": "android",
+            "description": "Device OS platform"
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "DeletePushTokenBody": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 10,
+            "example": "f-abc123xyz..."
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "PredefinedNotificationBody": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "DAILY_REMINDER",
+              "GOAL_COMPLETED",
+              "COINS_EARNED",
+              "EVENT_REMINDER",
+              "TREE_MILESTONE"
+            ],
+            "example": "DAILY_REMINDER",
+            "description": "Predefined notification type"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "coins": "50"
+            },
+            "description": "Template parameter substitutions"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
       "Notification": {
         "type": "object",
         "properties": {
           "id": {
             "type": "integer",
-            "example": 44
+            "example": 42
           },
           "type": {
             "type": "string",
-            "example": "event_reminder"
+            "example": "DAILY_REMINDER"
           },
           "title": {
             "type": "string",
-            "example": "Beach clean-up tomorrow, 7 AM"
+            "example": "Time to Log Your Day! 🌱"
           },
           "body": {
             "type": [
               "string",
               "null"
             ],
-            "example": "Your pass is ready."
+            "example": "Keep your eco-streak alive. Log your habits today."
           },
           "linkPath": {
             "type": [
               "string",
               "null"
             ],
-            "example": "/events/beach-cleanup-versova"
+            "example": "/track"
           },
           "readAt": {
             "type": [
               "string",
               "null"
             ],
-            "example": null
+            "example": "2026-11-01T10:00:00.000Z"
           },
           "createdAt": {
             "type": "string",
-            "example": "2026-10-31T08:00:00.000Z"
+            "example": "2026-11-01T09:00:00.000Z"
           }
         },
         "required": [
@@ -14790,12 +14857,264 @@
         }
       }
     },
+    "/api/v1/notifications/push-token": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Register FCM device push token",
+        "description": "Registers or updates the FCM push token for the authenticated user.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushTokenBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "registered": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "registered"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Unregister FCM push token",
+        "description": "Removes the device FCM push token on user logout.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeletePushTokenBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token unregistered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "unregistered": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "unregistered"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/send-predefined": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Send a predefined notification",
+        "description": "Dispatches one of the predefined notifications (DAILY_REMINDER, GOAL_COMPLETED, COINS_EARNED, EVENT_REMINDER, TREE_MILESTONE) with automatic FCM delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredefinedNotificationBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Notification dispatched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "pushCount": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "pushCount"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "tags": [
-          "reference"
+          "notifications"
         ],
         "summary": "In-app notifications",
+        "description": "Paginated list of in-app notifications for the authenticated user.",
         "security": [
           {
             "bearerAuth": []
@@ -14894,7 +15213,7 @@
     "/api/v1/notifications/{id}/read": {
       "patch": {
         "tags": [
-          "reference"
+          "notifications"
         ],
         "summary": "Mark one notification read",
         "security": [
@@ -14956,6 +15275,68 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Mark all notifications read",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All marked read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "markedCount": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "markedCount"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
             "content": {
               "application/json": {
                 "schema": {

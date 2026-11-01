@@ -3,4 +3,6 @@
 # esbuild (a transitive dep of drizzle-kit) has a postinstall that resolves its
 # platform binary. Allowed so `pnpm install` exits 0 in CI.
 allowBuilds:
+  '@firebase/util': false
   esbuild: true
+  protobufjs: false

@@ -4,13 +4,13 @@
 > Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
 > fails CI when this file is stale.
 
-**Version** 0.1.0 · **Base path** `/api/v1` · **81 paths** · **99 operations** · **119 schemas**
+**Version** 0.1.0 · **Base path** `/api/v1` · **90 paths** · **112 operations** · **131 schemas**
 
 ---
 
 ## Before you read this
 
-**Every endpoint below is implemented.** All 99 operations run against the real
+**Every endpoint below is implemented.** All 112 operations run against the real
 database; none returns `GEN_501` any more. Point your client at the server, not
 at the mock — the mock serves the *examples* in this document, so it will happily
 return a plausible shape for a request the real server would reject.
@@ -72,7 +72,9 @@ an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` acce
 - [seller](#seller) — 8 operations
 - [events](#events) — 14 operations
 - [organizations](#organizations) — 22 operations
-- [reference](#reference) — 5 operations
+- [admin-revenue](#admin-revenue) — 9 operations
+- [notifications](#notifications) — 6 operations
+- [reference](#reference) — 3 operations
 - [carbon](#carbon) — 1 operation
 - [Schemas](#schemas)
 
@@ -2279,6 +2281,7 @@ Public endpoint to check if an organization code exists and is approved to accep
 | `400` | Validation failed | null |
 | `403` | Not authorised | null |
 | `404` | Not found | null |
+| `429` | Rate limited — see Retry-After | null |
 
 ### `GET` `/api/v1/organizations/me`
 
@@ -2383,40 +2386,245 @@ Anyone may leave, except the last owner. Members are ADDED by an owner rather th
 
 ---
 
-## reference
+## admin-revenue
 
 | | Endpoint | Summary |
 |---|---|---|
-| `GET` | [`/api/v1/cities`](#get-api-v1-cities)  | City autocomplete for onboarding |
-| `GET` | [`/api/v1/notifications`](#get-api-v1-notifications) 🔒 | In-app notifications |
-| `PATCH` | [`/api/v1/notifications/{id}/read`](#patch-api-v1-notifications-id-read) 🔒 | Mark one notification read |
-| `GET` | [`/api/v1/regions`](#get-api-v1-regions)  | Regions with their grid emission factor and tariff |
-| `POST` | [`/api/v1/uploads/presign`](#post-api-v1-uploads-presign) 🔒 | Presigned PUT for a direct-to-storage upload |
+| `GET` | [`/api/v1/admin/revenue/analytics`](#get-api-v1-admin-revenue-analytics) 🔒 | Platform revenue, GMV, coin liability, and payout summary |
+| `GET` | [`/api/v1/admin/revenue/ledger`](#get-api-v1-admin-revenue-ledger) 🔒 | Immutable transaction ledger journal |
+| `GET` | [`/api/v1/admin/revenue/payouts`](#get-api-v1-admin-revenue-payouts) 🔒 | List seller payout records |
+| `POST` | [`/api/v1/admin/revenue/payouts`](#post-api-v1-admin-revenue-payouts) 🔒 | Disburse pending settlements to seller |
+| `GET` | [`/api/v1/admin/revenue/settlements`](#get-api-v1-admin-revenue-settlements) 🔒 | List order settlements |
+| `GET` | [`/api/v1/admin/settings`](#get-api-v1-admin-settings) 🔒 | Get global economy and commission settings |
+| `PATCH` | [`/api/v1/admin/settings`](#patch-api-v1-admin-settings) 🔒 | Update global economy and commission settings |
+| `GET` | [`/api/v1/admin/settings/sellers/{id}/commission`](#get-api-v1-admin-settings-sellers-id-commission) 🔒 | Get seller commission override |
+| `PUT` | [`/api/v1/admin/settings/sellers/{id}/commission`](#put-api-v1-admin-settings-sellers-id-commission) 🔒 | Set or clear seller commission override |
 
-### `GET` `/api/v1/cities`
+### `GET` `/api/v1/admin/revenue/analytics`
 
-**City autocomplete for onboarding**
+**Platform revenue, GMV, coin liability, and payout summary**
 
-🔓 No authentication.
-
-**Parameters**
-
-| Name | In | Required | Type | Notes |
-|---|---|---|---|---|
-| `q` | query | yes | string | e.g. `"mum"` |
+🔒 Requires a bearer token.
 
 **Responses**
 
 | Code | Meaning | `data` |
 |---|---|---|
-| `200` | Matching cities | object |
+| `200` | Revenue analytics summary | [`RevenueAnalytics`](#revenueanalytics) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `GET` `/api/v1/admin/revenue/ledger`
+
+**Immutable transaction ledger journal**
+
+🔒 Requires a bearer token.
+
+Double-entry style audit log for commissions, coin subsidies, fees, and payouts.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `sellerOrgId` | query | no | string | e.g. `"12"` |
+| `transactionType` | query | no | `sale_commission` \| `coin_subsidy` \| `coin_fee` \| `seller_payout` | e.g. `"sale_commission"` |
+| `orderId` | query | no | string |  |
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | default `50` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Settlement ledger entries | object |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `GET` `/api/v1/admin/revenue/payouts`
+
+**List seller payout records**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `sellerOrgId` | query | no | string | e.g. `"12"` |
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Seller payouts | object |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `POST` `/api/v1/admin/revenue/payouts`
+
+**Disburse pending settlements to seller**
+
+🔒 Requires a bearer token.
+
+Creates a payout batch and marks associated settlements as settled.
+
+**Request body** — [`CreatePayoutBody`](#createpayoutbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `sellerOrgId` | integer | yes | e.g. `12` |
+| `settlementIds` | integer[] | no |  |
+| `referenceNote` | string | no | e.g. `"Monthly disbursement via UPI/NEFT"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `201` | Payout disbursed | [`SellerPayout`](#sellerpayout) |
 | `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `GET` `/api/v1/admin/revenue/settlements`
+
+**List order settlements**
+
+🔒 Requires a bearer token.
+
+Line-item breakdown of sales, coin subsidies, platform commissions, and seller payouts.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `sellerOrgId` | query | no | string | e.g. `"12"` |
+| `status` | query | no | `pending` \| `settled` \| `cancelled` | e.g. `"pending"` |
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Order settlements | object |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `GET` `/api/v1/admin/settings`
+
+**Get global economy and commission settings**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Global system settings | [`SystemSettings`](#systemsettings) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `PATCH` `/api/v1/admin/settings`
+
+**Update global economy and commission settings**
+
+🔒 Requires a bearer token.
+
+Configures sales commission %, coin fee %, coin-to-rupee rate, and max coin redemption discount %.
+
+**Request body** — [`UpdateSystemSettingsBody`](#updatesystemsettingsbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `defaultCommissionRateBps` | integer | no | range 0…5000 |
+| `coinRedemptionFeeBps` | integer | no | range 0…2000 |
+| `coinsPerRupee` | integer | no |  |
+| `coinValuePaise` | integer | no |  |
+| `maxDiscountPercent` | integer | no | range 0…100 |
+| `payoutHoldDays` | integer | no | range 0…∞ |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Updated system settings | [`SystemSettings`](#systemsettings) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `GET` `/api/v1/admin/settings/sellers/{id}/commission`
+
+**Get seller commission override**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Seller commission override | [`SellerCommissionOverride`](#sellercommissionoverride) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+### `PUT` `/api/v1/admin/settings/sellers/{id}/commission`
+
+**Set or clear seller commission override**
+
+🔒 Requires a bearer token.
+
+Set `commissionRateBps: null` to revert to global platform default.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** — [`SellerCommissionOverrideBody`](#sellercommissionoverridebody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `commissionRateBps` | integer,null | yes | Seller override in basis points (800 = 8%), or null to inherit global default. e.g. `800`. range 0…5000 |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Updated seller commission override | [`SellerCommissionOverride`](#sellercommissionoverride) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+---
+
+## notifications
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/notifications`](#get-api-v1-notifications) 🔒 | In-app notifications |
+| `PATCH` | [`/api/v1/notifications/{id}/read`](#patch-api-v1-notifications-id-read) 🔒 | Mark one notification read |
+| `DELETE` | [`/api/v1/notifications/push-token`](#delete-api-v1-notifications-push-token) 🔒 | Unregister FCM push token |
+| `POST` | [`/api/v1/notifications/push-token`](#post-api-v1-notifications-push-token) 🔒 | Register FCM device push token |
+| `POST` | [`/api/v1/notifications/read-all`](#post-api-v1-notifications-read-all) 🔒 | Mark all notifications read |
+| `POST` | [`/api/v1/notifications/send-predefined`](#post-api-v1-notifications-send-predefined) 🔒 | Send a predefined notification |
 
 ### `GET` `/api/v1/notifications`
 
 **In-app notifications**
 
 🔒 Requires a bearer token.
+
+Paginated list of in-app notifications for the authenticated user.
 
 **Parameters**
 
@@ -2452,6 +2660,116 @@ Anyone may leave, except the last owner. Members are ADDED by an owner rather th
 | `200` | Marked read | [`Notification`](#notification) |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
+
+### `DELETE` `/api/v1/notifications/push-token`
+
+**Unregister FCM push token**
+
+🔒 Requires a bearer token.
+
+Removes the device FCM push token on user logout.
+
+**Request body** (required) — [`DeletePushTokenBody`](#deletepushtokenbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `token` | string | yes | e.g. `"f-abc123xyz..."` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Token unregistered | object |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+
+### `POST` `/api/v1/notifications/push-token`
+
+**Register FCM device push token**
+
+🔒 Requires a bearer token.
+
+Registers or updates the FCM push token for the authenticated user.
+
+**Request body** (required) — [`PushTokenBody`](#pushtokenbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `token` | string | yes | FCM device token. e.g. `"f-abc123xyz..."` |
+| `platform` | `android` \| `ios` | no | Device OS platform. e.g. `"android"`. default `"android"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Token registered | object |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+
+### `POST` `/api/v1/notifications/read-all`
+
+**Mark all notifications read**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | All marked read | object |
+| `401` | Not authenticated | null |
+
+### `POST` `/api/v1/notifications/send-predefined`
+
+**Send a predefined notification**
+
+🔒 Requires a bearer token.
+
+Dispatches one of the predefined notifications (DAILY_REMINDER, GOAL_COMPLETED, COINS_EARNED, EVENT_REMINDER, TREE_MILESTONE) with automatic FCM delivery.
+
+**Request body** (required) — [`PredefinedNotificationBody`](#predefinednotificationbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `type` | `DAILY_REMINDER` \| `GOAL_COMPLETED` \| `COINS_EARNED` \| `EVENT_REMINDER` \| `TREE_MILESTONE` | yes | Predefined notification type. e.g. `"DAILY_REMINDER"` |
+| `params` | object | no | Template parameter substitutions |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Notification dispatched | object |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+
+---
+
+## reference
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/cities`](#get-api-v1-cities)  | City autocomplete for onboarding |
+| `GET` | [`/api/v1/regions`](#get-api-v1-regions)  | Regions with their grid emission factor and tariff |
+| `POST` | [`/api/v1/uploads/presign`](#post-api-v1-uploads-presign) 🔒 | Presigned PUT for a direct-to-storage upload |
+
+### `GET` `/api/v1/cities`
+
+**City autocomplete for onboarding**
+
+🔓 No authentication.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `q` | query | yes | string | e.g. `"mum"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Matching cities | object |
+| `400` | Validation failed | null |
 
 ### `GET` `/api/v1/regions`
 
@@ -2517,7 +2835,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 
 ## Schemas
 
-119 named components.
+131 named components.
 
 ### ActiveGoalSummary
 
@@ -2705,6 +3023,14 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `options` | string[] | no |  |
 | `required` | boolean | no | e.g. `false`. default `false` |
 
+### CreatePayoutBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `sellerOrgId` | integer | yes | e.g. `12` |
+| `settlementIds` | integer[] | no |  |
+| `referenceNote` | string | no | e.g. `"Monthly disbursement via UPI/NEFT"` |
+
 ### CreateSellerProductBody
 
 | Field | Type | Required | Notes |
@@ -2741,6 +3067,12 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 ### DataExport
 
 `object`
+
+### DeletePushTokenBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `token` | string | yes | e.g. `"f-abc123xyz..."` |
 
 ### EmissionFactor
 
@@ -3057,13 +3389,13 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `id` | integer | yes | e.g. `44` |
-| `type` | string | yes | e.g. `"event_reminder"` |
-| `title` | string | yes | e.g. `"Beach clean-up tomorrow, 7 AM"` |
-| `body` | string,null | yes | e.g. `"Your pass is ready."` |
-| `linkPath` | string,null | yes | e.g. `"/events/beach-cleanup-versova"` |
-| `readAt` | string,null | yes |  |
-| `createdAt` | string | yes | e.g. `"2026-10-31T08:00:00.000Z"` |
+| `id` | integer | yes | e.g. `42` |
+| `type` | string | yes | e.g. `"DAILY_REMINDER"` |
+| `title` | string | yes | e.g. `"Time to Log Your Day! 🌱"` |
+| `body` | string,null | yes | e.g. `"Keep your eco-streak alive. Log your habits today."` |
+| `linkPath` | string,null | yes | e.g. `"/track"` |
+| `readAt` | string,null | yes | e.g. `"2026-11-01T10:00:00.000Z"` |
+| `createdAt` | string | yes | e.g. `"2026-11-01T09:00:00.000Z"` |
 
 ### OkMessage
 
@@ -3172,6 +3504,32 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `status` | `placed` \| `confirmed` \| `shipped` \| `delivered` \| `cancelled` | yes | e.g. `"placed"` |
 | `address` | [`Address`](#address) \| null | yes |  |
 | `createdAt` | string | yes | e.g. `"2026-10-31T10:02:00.000Z"` |
+
+### OrderSettlement
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `101` |
+| `orderId` | integer | yes | e.g. `55` |
+| `orderNumber` | string | yes | e.g. `"ECO-2026-00042"` |
+| `orderItemId` | integer | yes | e.g. `72` |
+| `productName` | string | yes | e.g. `"Bamboo Toothbrush (Pack of 4)"` |
+| `sellerOrgId` | integer | yes | e.g. `12` |
+| `sellerName` | string | yes | e.g. `"EcoLiving India"` |
+| `saleAmountPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `coinsUsed` | integer | yes | e.g. `100` |
+| `coinValuePaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `cashPaidPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `commissionRateBps` | integer | yes | e.g. `1000` |
+| `salesCommissionPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `coinFeeRateBps` | integer | yes | e.g. `200` |
+| `coinFeePaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `platformCommissionPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `sellerPayoutPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `status` | `pending` \| `settled` \| `cancelled` | yes | e.g. `"pending"` |
+| `payoutId` | integer,null | yes |  |
+| `settledAt` | string,null | yes |  |
+| `createdAt` | string | yes | e.g. `"2026-11-01T10:00:00.000Z"` |
 
 ### Organization
 
@@ -3355,6 +3713,13 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `addressId` | integer | yes | e.g. `2` |
 | `idempotencyKey` | string (uuid) | yes | e.g. `"0193f0b1-55aa-7c3d-8e21-9f0a1b2c3d4e"` |
 
+### PredefinedNotificationBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `type` | `DAILY_REMINDER` \| `GOAL_COMPLETED` \| `COINS_EARNED` \| `EVENT_REMINDER` \| `TREE_MILESTONE` | yes | Predefined notification type. e.g. `"DAILY_REMINDER"` |
+| `params` | object | no | Template parameter substitutions |
+
 ### PresignBody
 
 | Field | Type | Required | Notes |
@@ -3415,6 +3780,13 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `currentStreak` | integer | yes | e.g. `12` |
 | `eventsAttended` | integer | yes | e.g. `3` |
 | `memberSince` | string | yes | e.g. `"2026-08-02T00:00:00.000Z"` |
+
+### PushTokenBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `token` | string | yes | FCM device token. e.g. `"f-abc123xyz..."` |
+| `platform` | `android` \| `ios` | no | Device OS platform. e.g. `"android"`. default `"android"` |
 
 ### Readiness
 
@@ -3477,6 +3849,23 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `token` | string | yes |  |
 | `password` | string | yes | e.g. `"correct horse battery"` |
 
+### RevenueAnalytics
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `grossMerchandiseValuePaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `totalCashCollectedPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `totalCoinDiscountPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `totalCoinsRedeemed` | integer | yes | e.g. `1250` |
+| `platformRevenuePaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `platformSalesCommissionPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `platformCoinFeesPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `totalSellerPayoutsPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `pendingSellerPayoutsPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `settledSellerPayoutsPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `netPlatformCashFlowPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `monthlyBreakdown` | object[] | yes |  |
+
 ### ReviewOrganizationBody
 
 | Field | Type | Required | Notes |
@@ -3536,6 +3925,23 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `topProducts` | object[] | yes |  |
 | `monthlySales` | object[] | yes |  |
 
+### SellerCommissionOverride
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `sellerOrgId` | integer | yes | e.g. `42` |
+| `sellerName` | string | yes | e.g. `"GreenRoot Organics"` |
+| `commissionRateBps` | integer,null | yes | e.g. `800` |
+| `commissionPercent` | number,null | yes | e.g. `8` |
+| `effectiveCommissionRateBps` | integer | yes | e.g. `800` |
+| `effectiveCommissionPercent` | number | yes | e.g. `8` |
+
+### SellerCommissionOverrideBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `commissionRateBps` | integer,null | yes | Seller override in basis points (800 = 8%), or null to inherit global default. e.g. `800`. range 0…5000 |
+
 ### SellerOrder
 
 | Field | Type | Required | Notes |
@@ -3564,6 +3970,21 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `totalPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
 | `status` | `placed` \| `confirmed` \| `shipped` \| `delivered` \| `cancelled` | yes | e.g. `"placed"` |
 
+### SellerPayout
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `10` |
+| `payoutNumber` | string | yes | e.g. `"PAY-2026-00001"` |
+| `sellerOrgId` | integer | yes | e.g. `12` |
+| `sellerName` | string | yes | e.g. `"EcoLiving India"` |
+| `totalAmountPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `settlementCount` | integer | yes | e.g. `5` |
+| `status` | `pending` \| `processing` \| `completed` \| `failed` | yes | e.g. `"completed"` |
+| `referenceNote` | string,null | yes | e.g. `"Bank NEFT Ref: N123456789"` |
+| `processedBy` | integer,null | yes | e.g. `1` |
+| `createdAt` | string | yes | e.g. `"2026-11-01T10:00:00.000Z"` |
+
 ### Session
 
 | Field | Type | Required | Notes |
@@ -3571,6 +3992,24 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `accessToken` | string | yes | e.g. `"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."` |
 | `accessTokenExpiresIn` | integer | yes | seconds. e.g. `900` |
 | `refreshToken` | string,null | yes | Non-null ONLY when the request carried `x-ecolife-platform: ios` or `android`. Without that header the caller is treated as a browser: the token is set as an httpOnly cookie and this field is null. It is not a bug — returning a 30-day credential where JS can read it would hand any XSS the whole account. |
+
+### SettlementLedgerEntry
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `501` |
+| `settlementId` | integer,null | yes | e.g. `101` |
+| `orderId` | integer | yes | e.g. `55` |
+| `orderNumber` | string | yes | e.g. `"ECO-2026-00042"` |
+| `orderItemId` | integer,null | yes | e.g. `72` |
+| `sellerOrgId` | integer | yes | e.g. `12` |
+| `sellerName` | string | yes | e.g. `"EcoLiving India"` |
+| `transactionType` | `sale_commission` \| `coin_subsidy` \| `coin_fee` \| `seller_payout` | yes | e.g. `"sale_commission"` |
+| `amountPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `status` | `pending` \| `settled` \| `cancelled` | yes | e.g. `"pending"` |
+| `idempotencyKey` | string | yes | e.g. `"order:55:item:72:sale_commission"` |
+| `note` | string,null | yes | e.g. `"Platform 10% commission on item 72"` |
+| `createdAt` | string | yes | e.g. `"2026-11-01T10:00:00.000Z"` |
 
 ### StoredDailyAnswers
 
@@ -3611,6 +4050,22 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `answers` | [`OrgAnswerInput`](#organswerinput)[] | yes |  |
+
+### SystemSettings
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `1` |
+| `defaultCommissionRateBps` | integer | yes | Commission in basis points (1000 = 10%). e.g. `1000`. range 0…5000 |
+| `defaultCommissionPercent` | number | yes | Calculated commission percentage. e.g. `10` |
+| `coinRedemptionFeeBps` | integer | yes | Fee on coin redemptions in bps (200 = 2%). e.g. `200`. range 0…2000 |
+| `coinRedemptionFeePercent` | number | yes | Calculated coin fee percentage. e.g. `2` |
+| `coinsPerRupee` | integer | yes | 10 coins = 1 Rupee. e.g. `10` |
+| `coinValuePaise` | integer | yes | Value of 1 coin in paise. e.g. `10` |
+| `maxDiscountPercent` | integer | yes | Max allowable coin redemption %. e.g. `20`. range 0…100 |
+| `payoutHoldDays` | integer | yes | Settlement hold period in days. e.g. `7`. range 0…∞ |
+| `updatedBy` | integer,null | yes | e.g. `1` |
+| `updatedAt` | string | yes | e.g. `"2026-11-01T10:00:00.000Z"` |
 
 ### TrackToday
 
@@ -3717,6 +4172,17 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `allowCoinRedemption` | boolean | no |  |
 | `maxCoinRedemptionPercent` | integer | no | range 0…100 |
 | `isActive` | boolean | no |  |
+
+### UpdateSystemSettingsBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `defaultCommissionRateBps` | integer | no | range 0…5000 |
+| `coinRedemptionFeeBps` | integer | no | range 0…2000 |
+| `coinsPerRupee` | integer | no |  |
+| `coinValuePaise` | integer | no |  |
+| `maxDiscountPercent` | integer | no | range 0…100 |
+| `payoutHoldDays` | integer | no | range 0…∞ |
 
 ### UserSummary
 

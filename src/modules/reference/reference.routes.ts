@@ -97,43 +97,4 @@ uploadRoutes.openapi(
     ok(c, await presignUpload({ userId: c.get('user').id, ...c.req.valid('json') }), 200),
 );
 
-export const notificationRoutes = createModule();
-
-notificationRoutes.openapi(
-  createRoute({
-    method: 'get',
-    path: '/',
-    tags: ['reference'],
-    summary: 'In-app notifications',
-    middleware: [requireUser] as const,
-    security: secured,
-    request: { query: cursorQuery },
-    responses: {
-      200: jsonOk(paginated(notificationSchema), 'Notifications'),
-      400: errorResponses[400],
-      401: errorResponses[401],
-    },
-  }),
-  async (c) => {
-    const { cursor, limit } = c.req.valid('query');
-    return ok(c, await service.listNotifications(c.get('user').id, limit, cursor), 200);
-  },
-);
-
-notificationRoutes.openapi(
-  createRoute({
-    method: 'patch',
-    path: '/{id}/read',
-    tags: ['reference'],
-    summary: 'Mark one notification read',
-    middleware: [requireUser] as const,
-    security: secured,
-    request: { params: idParam },
-    responses: {
-      200: jsonOk(notificationSchema, 'Marked read'),
-      401: errorResponses[401],
-      404: errorResponses[404],
-    },
-  }),
-  async (c) => ok(c, await service.markRead(c.get('user').id, c.req.valid('param').id), 200),
-);
+export { notificationRoutes } from '@modules/notifications/notifications.routes.ts';

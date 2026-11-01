@@ -3,6 +3,7 @@ import { DomainError } from '@common/errors/domain-error.ts';
 import { award, coinsFor, type Executor, REWARDS } from '@common/rewards/rewards.ts';
 import { addDays, daysBetween, localDate } from '@common/time.ts';
 import { db } from '@database/client.ts';
+import { sendPredefinedNotification } from '@modules/notifications/fcm.service.ts';
 import * as profileRepo from '@modules/profile/profile.repository.ts';
 import * as repo from './goals.repository.ts';
 
@@ -185,6 +186,11 @@ async function settleIfExpired(goal: GoalRow, today: string) {
     }
     if (!achieved) return { goal: settled, reward: null };
 
+    // Automatic predefined notification dispatch
+    sendPredefinedNotification(goal.userId, 'GOAL_COMPLETED', {
+      goalTitle: `${goal.period} goal`,
+    }).catch((err) => console.error('[FCM] Goal completed push failed:', err));
+
     const points = REWARDS.goal[goal.period as Period];
     const coins = coinsFor(points);
     // `goal:{id}` — the row is never deleted, so this key is stable forever.
@@ -198,6 +204,12 @@ async function settleIfExpired(goal: GoalRow, today: string) {
       sourceId: `goal:${goal.id}`,
       note: `${goal.period} goal achieved`,
     });
+
+    if (result.awarded && coins > 0) {
+      sendPredefinedNotification(goal.userId, 'COINS_EARNED', {
+        coins: String(coins),
+      }).catch((err) => console.error('[FCM] Coins earned push failed:', err));
+    }
 
     return {
       goal: settled,

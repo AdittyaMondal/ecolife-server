@@ -9,6 +9,7 @@ import {
 } from '@common/rewards/rewards.ts';
 import { env } from '@config/env.ts';
 import { db } from '@database/client.ts';
+import { sendPredefinedNotification } from '@modules/notifications/fcm.service.ts';
 import * as orgRepo from '@modules/organizations/organizations.repository.ts';
 import * as profileRepo from '@modules/profile/profile.repository.ts';
 import * as repo from './events.repository.ts';
@@ -397,6 +398,13 @@ export async function register(userId: number, eventId: number) {
 
     const view = await repo.findById(eventId, userId, tx);
     if (!view) throw new DomainError('EVENT_009', 'Event not found.', 404);
+
+    // Predefined FCM notification dispatch (asynchronous, non-blocking)
+    sendPredefinedNotification(userId, 'EVENT_REMINDER', {
+      eventId: String(eventId),
+      eventName: event.title,
+    }).catch((err) => console.error('[FCM] Event reminder push failed:', err));
+
     return { pass: passView(pass, claimed, passCode), event: serialiseEvent(view, userId) };
   });
 }
