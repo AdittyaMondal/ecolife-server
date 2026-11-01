@@ -192,26 +192,49 @@ export async function googleSignIn(accessToken: string, timezone: string, meta: 
 
   const existing = await repo.findUserByEmail(identity.email);
   if (existing) {
+    if (existing.emailVerifiedAt) {
+      /**
+       * Both sides have proven the same address — our own verify-email flow
+       * and Google — so this is the same person. Plain sign-in.
+       */
+      return sessionPayload(existing.id, meta);
+    }
+
     /**
-     * Google has verified this address, so an account that signed up locally
-     * and never clicked the link is verified now. Rewards are gated on
-     * `emailVerifiedAt` (§4.4), so without this a Google sign-in would leave
-     * the user unable to earn with no way to understand why.
+     * `[LESSON]` ACCOUNT PRE-HIJACKING. An unverified account has proven
+     * nothing about who owns the address, so it cannot simply be adopted.
+     *
+     * /auth/register creates rows with `emailVerifiedAt` unset, so anyone can
+     * pre-register an address they do not own. The attack: register
+     * victim@gmail.com with a password you know, wait, and when the victim
+     * signs in with Google they land in YOUR account — and you still know the
+     * password, so /auth/login hands you their footprint history, points,
+     * orders and addresses. Marking the email verified and signing them in,
+     * which is what this did before, is exactly the bug.
+     *
+     * Google has proven ownership; the local row has not. So the verified
+     * owner takes the account over and every unproven credential attached to
+     * it is destroyed:
+     *
+     *   - the password becomes an unusable random hash, so the squatter's
+     *     known password stops working,
+     *   - every existing session is revoked, so one they already hold dies,
+     *   - pending verify/reset links are voided, so a link already sitting in
+     *     their inbox cannot be used to climb back in.
+     *
+     * The real owner keeps the row and its data, and can set a password
+     * through the normal reset flow. The alternative — refusing the sign-in —
+     * would let anyone lock a victim out of Google sign-in forever just by
+     * registering their address first.
      */
-    if (!existing.emailVerifiedAt) await repo.markEmailVerified(existing.id);
+    await repo.setPassword(existing.id, await unusablePasswordHash());
+    await revokeAllSessions(existing.id);
+    await repo.revokePendingEmailTokens(existing.id);
+    await repo.markEmailVerified(existing.id);
     return sessionPayload(existing.id, meta);
   }
 
-  /**
-   * `password_hash` is NOT NULL and this user has no password.
-   *
-   * A random argon2id hash of a value nobody holds: the column is satisfied,
-   * and `verifyPassword` can never succeed against it, so /auth/login stays
-   * closed for this account until they set one through the existing reset
-   * flow. Storing a constant, an empty string, or a predictable placeholder
-   * would make one guessable password open every Google-created account.
-   */
-  const unusablePassword = await hashPassword(crypto.randomUUID() + crypto.randomUUID());
+  const unusablePassword = await unusablePasswordHash();
 
   /**
    * Two first-time sign-ins for the same address can race.
@@ -243,6 +266,20 @@ export async function googleSignIn(accessToken: string, timezone: string, meta: 
     if (!winner) throw error;
     return sessionPayload(winner.id, meta);
   }
+}
+
+/**
+ * A password hash nothing can satisfy.
+ *
+ * `password_hash` is NOT NULL but a Google-only account has no password. A
+ * random argon2id hash of a value nobody holds satisfies the column while
+ * `verifyPassword` can never succeed against it, so /auth/login stays closed
+ * until the user sets one through the reset flow. A constant, an empty string
+ * or a predictable placeholder would make one guessable password open every
+ * account created or taken over this way.
+ */
+function unusablePasswordHash(): Promise<string> {
+  return hashPassword(crypto.randomUUID() + crypto.randomUUID());
 }
 
 /** Google's name, trimmed to the column's intent, else the local-part of the email. */

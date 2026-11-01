@@ -73,6 +73,20 @@ export async function markEmailVerified(userId: number) {
   await db.update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, userId)).execute();
 }
 
+/**
+ * Voids every unused verify/reset link for a user.
+ *
+ * Needed when an account changes hands: a pending reset link in an attacker's
+ * inbox would otherwise still work after the real owner took the account over.
+ */
+export async function revokePendingEmailTokens(userId: number) {
+  await db
+    .update(emailTokens)
+    .set({ usedAt: new Date() })
+    .where(and(eq(emailTokens.userId, userId), isNull(emailTokens.usedAt)))
+    .execute();
+}
+
 export async function setPassword(userId: number, passwordHash: string) {
   await db.update(users).set({ passwordHash }).where(eq(users.id, userId)).execute();
 }

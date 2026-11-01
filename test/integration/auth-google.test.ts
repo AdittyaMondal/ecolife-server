@@ -192,7 +192,7 @@ describe('POST /auth/google — first sign-in', () => {
 
 describe('POST /auth/google — returning user', () => {
   it(
-    'signs in an existing account and verifies an address that was not verified',
+    'takes an UNVERIFIED account over, so a pre-registered address cannot be hijacked',
     async () => {
       // Register locally first, leaving the email unverified.
       const email = addr();
@@ -210,19 +210,128 @@ describe('POST /auth/google — returning user', () => {
       const userId = (await json(reg)).data.user.id as number;
       await db.update(users).set({ emailVerifiedAt: null }).where(eq(users.id, userId)).execute();
 
+      const [before] = await db.select().from(users).where(eq(users.id, userId));
+      const squatterHash = before?.passwordHash;
+
       stubGoogle(good(email));
       const res = await googleIn(
         { accessToken: 'ya29.stub', timezone: 'UTC' },
         { 'x-ecolife-platform': 'ios' },
       );
       expect(res.status).toBe(200);
+      // The row and its data are kept — the verified owner inherits them.
       expect((await json(res)).data.user.id).toBe(userId);
 
       const [row] = await db.select().from(users).where(eq(users.id, userId));
-      // Google verified it, so the local verify-email step is satisfied.
+      // Google proved the address, so the local verify-email step is satisfied.
       expect(row?.emailVerifiedAt).not.toBeNull();
       // The local name is kept; Google does not get to rename an account.
       expect(row?.name).toBe('Local Signup');
+
+      /**
+       * The attack this closes: whoever registered the address and never
+       * verified it still knew the password. Adopting the row as-is would have
+       * handed them the victim's account. The password must be gone.
+       */
+      expect(row?.passwordHash).not.toBe(squatterHash);
+      const login = await call('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password: 'correct horse battery staple' }),
+      });
+      expect(login.status).toBe(401);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'revokes the squatter\u2019s existing sessions when it takes the account over',
+    async () => {
+      const email = addr();
+      const reg = await call('/auth/register', {
+        method: 'POST',
+        headers: { 'x-ecolife-platform': 'ios' },
+        body: JSON.stringify({
+          name: 'Squatter',
+          email,
+          password: 'correct horse battery staple',
+          timezone: 'UTC',
+        }),
+      });
+      expect(reg.status).toBe(201);
+      const regBody = await json(reg);
+      const userId = regBody.data.user.id as number;
+      const squatterRefresh = regBody.data.session.refreshToken as string;
+      await db.update(users).set({ emailVerifiedAt: null }).where(eq(users.id, userId)).execute();
+
+      // The squatter's refresh token works right up to the takeover.
+      const beforeTakeover = await call('/auth/refresh', {
+        method: 'POST',
+        headers: { 'x-ecolife-platform': 'ios' },
+        body: JSON.stringify({ refreshToken: squatterRefresh }),
+      });
+      expect(beforeTakeover.status).toBe(200);
+      const rotated = (await json(beforeTakeover)).data.refreshToken as string;
+
+      stubGoogle(good(email));
+      expect(
+        (
+          await googleIn(
+            { accessToken: 'ya29.stub', timezone: 'UTC' },
+            { 'x-ecolife-platform': 'ios' },
+          )
+        ).status,
+      ).toBe(200);
+      globalThis.fetch = realFetch;
+
+      // ...and is dead afterwards. A session they already held is not a way
+      // back into an account that has changed hands.
+      const after = await call('/auth/refresh', {
+        method: 'POST',
+        headers: { 'x-ecolife-platform': 'ios' },
+        body: JSON.stringify({ refreshToken: rotated }),
+      });
+      expect(after.status).toBe(401);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'signs a VERIFIED account straight in, leaving its password alone',
+    async () => {
+      const email = addr();
+      const password = 'correct horse battery staple';
+      const reg = await call('/auth/register', {
+        method: 'POST',
+        headers: { 'x-ecolife-platform': 'ios' },
+        body: JSON.stringify({ name: 'Verified Local', email, password, timezone: 'UTC' }),
+      });
+      expect(reg.status).toBe(201);
+      const userId = (await json(reg)).data.user.id as number;
+      // Both sides have proven the address, so this is the same person and
+      // there is nothing to take over.
+      await db
+        .update(users)
+        .set({ emailVerifiedAt: new Date() })
+        .where(eq(users.id, userId))
+        .execute();
+
+      stubGoogle(good(email));
+      expect(
+        (
+          await googleIn(
+            { accessToken: 'ya29.stub', timezone: 'UTC' },
+            { 'x-ecolife-platform': 'ios' },
+          )
+        ).status,
+      ).toBe(200);
+      globalThis.fetch = realFetch;
+
+      // Their password still works — we did not lock a legitimate user out.
+      const login = await call('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      expect(login.status).toBe(200);
     },
     TIMEOUT,
   );
