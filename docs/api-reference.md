@@ -166,7 +166,7 @@ Failures are deliberately indistinguishable between unknown and wrong-password. 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `email` | string (email) | yes | e.g. `"yusuf@example.com"` |
-| `password` | string | yes | e.g. `"correct horse battery"` |
+| `password` | string | yes |  |
 
 **Responses**
 
@@ -2969,7 +2969,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `email` | string (email) | yes | e.g. `"yusuf@example.com"` |
-| `password` | string | yes | e.g. `"correct horse battery"` |
+| `password` | string | yes |  |
 
 ### LogResult
 
