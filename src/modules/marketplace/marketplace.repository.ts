@@ -188,7 +188,8 @@ export async function insertOrder(tx: Executor, values: typeof orders.$inferInse
 }
 
 export async function insertOrderItems(tx: Executor, rows: (typeof orderItems.$inferInsert)[]) {
-  if (rows.length > 0) await tx.insert(orderItems).values(rows);
+  if (rows.length === 0) return [];
+  return tx.insert(orderItems).values(rows).returning();
 }
 
 export function listOrderItems(orderIds: number[]) {

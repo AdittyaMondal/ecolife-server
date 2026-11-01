@@ -162,3 +162,24 @@ export const orderStatus = pgEnum('order_status', [
   'delivered',
   'cancelled',
 ]);
+
+export const settlementStatus = pgEnum('settlement_status', [
+  'pending',
+  'settled',
+  'cancelled',
+]);
+
+export const settlementTransactionType = pgEnum('settlement_transaction_type', [
+  'sale_commission',
+  'coin_subsidy',
+  'coin_fee',
+  'seller_payout',
+]);
+
+export const payoutStatus = pgEnum('payout_status', [
+  'pending',
+  'processing',
+  'completed',
+  'failed',
+]);
+

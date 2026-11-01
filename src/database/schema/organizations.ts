@@ -3,7 +3,9 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -44,6 +46,11 @@ export const organizations = pgTable(
     city: text('city'),
     regionCode: text('region_code'),
     address: text('address'),
+    /**
+     * Seller sales commission override in basis points (e.g. 800 = 8.00%).
+     * If NULL, platform default commission from system_settings applies.
+     */
+    commissionRateBps: integer('commission_rate_bps'),
     /** Who approved or rejected it, and when. Null while pending. */
     reviewedBy: bigint('reviewed_by', { mode: 'number' }).references(() => users.id, {
       onDelete: 'set null',
@@ -57,6 +64,10 @@ export const organizations = pgTable(
   (t) => [
     index('orgs_type_status_idx').on(t.type, t.status),
     uniqueIndex('orgs_name_lower_unq').on(sql`lower(${t.name})`),
+    check(
+      'org_commission_bps_valid',
+      sql`${t.commissionRateBps} IS NULL OR (${t.commissionRateBps} >= 0 AND ${t.commissionRateBps} <= 5000)`,
+    ),
   ],
 );
 

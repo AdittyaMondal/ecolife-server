@@ -3,8 +3,11 @@ import { decodeIdCursor, type Page, toPage } from '@common/pagination.ts';
 import { award } from '@common/rewards/rewards.ts';
 import { env } from '@config/env.ts';
 import { db } from '@database/client.ts';
+import { organizations } from '@database/schema/index.ts';
 import * as orgRepo from '@modules/organizations/organizations.repository.ts';
 import * as profileRepo from '@modules/profile/profile.repository.ts';
+import * as revenueRepo from '@modules/revenue/revenue.repository.ts';
+import { inArray } from 'drizzle-orm';
 import * as repo from './marketplace.repository.ts';
 
 /**
@@ -291,7 +294,7 @@ export async function placeOrder(userId: number, body: PlaceOrderBody) {
 
     // Name and price are SNAPSHOTS. A later rename or repricing must not
     // rewrite what someone already bought.
-    await repo.insertOrderItems(
+    const insertedItems = await repo.insertOrderItems(
       tx,
       priced.items.map((i) => ({
         orderId: order.id,
@@ -310,6 +313,141 @@ export async function placeOrder(userId: number, body: PlaceOrderBody) {
         status: 'placed' as const,
       })),
     );
+
+    // Part 7: Platform Revenue & Seller Settlements (Requirements 27 & 28)
+    const settings = await revenueRepo.getSystemSettings(tx);
+    const sellerOrgIds = [
+      ...new Set(
+        insertedItems
+          .map((i) => i.sellerOrgId)
+          .filter((id): id is number => id !== null),
+      ),
+    ];
+    const sellerOrgs =
+      sellerOrgIds.length > 0
+        ? await tx.select().from(organizations).where(inArray(organizations.id, sellerOrgIds))
+        : [];
+    const sellerOrgMap = new Map(sellerOrgs.map((o) => [o.id, o]));
+
+    let runningDiscountPaise = 0;
+    let runningCoins = 0;
+
+    for (let idx = 0; idx < insertedItems.length; idx++) {
+      const item = insertedItems[idx];
+      if (!item) continue;
+      const isLast = idx === insertedItems.length - 1;
+      const lineSubtotal = item.unitPaise * item.quantity;
+
+      let lineDiscountPaise = 0;
+      let lineCoinsUsed = 0;
+
+      if (order.subtotalPaise > 0 && order.discountPaise > 0) {
+        if (isLast) {
+          lineDiscountPaise = Math.max(0, order.discountPaise - runningDiscountPaise);
+          lineCoinsUsed = Math.max(0, order.coinsSpent - runningCoins);
+        } else {
+          lineDiscountPaise = Math.floor(
+            (lineSubtotal * order.discountPaise) / order.subtotalPaise,
+          );
+          lineCoinsUsed = Math.floor(
+            (lineSubtotal * order.coinsSpent) / order.subtotalPaise,
+          );
+          runningDiscountPaise += lineDiscountPaise;
+          runningCoins += lineCoinsUsed;
+        }
+      }
+
+      if (item.sellerOrgId) {
+        const sellerOrg = sellerOrgMap.get(item.sellerOrgId);
+        const commissionRateBps =
+          sellerOrg?.commissionRateBps ?? settings.defaultCommissionRateBps;
+        const salesCommissionPaise = Math.round(
+          (lineSubtotal * commissionRateBps) / 10000,
+        );
+        const coinFeeRateBps = settings.coinRedemptionFeeBps;
+        const coinFeePaise = Math.round((lineDiscountPaise * coinFeeRateBps) / 10000);
+        const platformCommissionPaise = salesCommissionPaise + coinFeePaise;
+        const sellerPayoutPaise = lineSubtotal - platformCommissionPaise;
+
+        // Platform loss-prevention invariant
+        if (sellerPayoutPaise < 0 || platformCommissionPaise > lineSubtotal) {
+          throw new DomainError(
+            'SHOP_009',
+            'Settlement calculation results in negative seller payout or platform deficit',
+            422,
+            {
+              productId: item.productId,
+              sellerPayoutPaise,
+              platformCommissionPaise,
+            },
+          );
+        }
+
+        const cashPaidPaise = lineSubtotal - lineDiscountPaise;
+
+        await revenueRepo.insertSettlementAndLedger(
+          {
+            orderId: order.id,
+            orderItemId: item.id,
+            sellerOrgId: item.sellerOrgId,
+            saleAmountPaise: lineSubtotal,
+            coinsUsed: lineCoinsUsed,
+            coinValuePaise: lineDiscountPaise,
+            cashPaidPaise,
+            commissionRateBps,
+            salesCommissionPaise,
+            coinFeeRateBps,
+            coinFeePaise,
+            platformCommissionPaise,
+            sellerPayoutPaise,
+            status: 'pending',
+          },
+          [
+            {
+              orderId: order.id,
+              orderItemId: item.id,
+              sellerOrgId: item.sellerOrgId,
+              transactionType: 'sale_commission',
+              amountPaise: salesCommissionPaise,
+              status: 'pending',
+              idempotencyKey: `order:${order.id}:item:${item.id}:sale_commission`,
+              note: `Platform ${commissionRateBps / 100}% commission on item ${item.id}`,
+            },
+            {
+              orderId: order.id,
+              orderItemId: item.id,
+              sellerOrgId: item.sellerOrgId,
+              transactionType: 'coin_subsidy',
+              amountPaise: lineDiscountPaise,
+              status: 'pending',
+              idempotencyKey: `order:${order.id}:item:${item.id}:coin_subsidy`,
+              note: `Coin liability subsidy for ${lineCoinsUsed} coins on item ${item.id}`,
+            },
+            {
+              orderId: order.id,
+              orderItemId: item.id,
+              sellerOrgId: item.sellerOrgId,
+              transactionType: 'coin_fee',
+              amountPaise: coinFeePaise,
+              status: 'pending',
+              idempotencyKey: `order:${order.id}:item:${item.id}:coin_fee`,
+              note: `Coin redemption fee of ${coinFeeRateBps / 100}% on item ${item.id}`,
+            },
+            {
+              orderId: order.id,
+              orderItemId: item.id,
+              sellerOrgId: item.sellerOrgId,
+              transactionType: 'seller_payout',
+              amountPaise: sellerPayoutPaise,
+              status: 'pending',
+              idempotencyKey: `order:${order.id}:item:${item.id}:seller_payout`,
+              note: `Pending seller payout for item ${item.id}`,
+            },
+          ],
+          tx,
+        );
+      }
+    }
 
     if (priced.coinsSpent > 0) {
       // Negative coins, zero points: spending must never move the

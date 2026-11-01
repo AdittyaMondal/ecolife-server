@@ -60,11 +60,15 @@ afterAll(async () => {
       ...TEST_EMAIL_PATTERNS.map((p) => like(users.email, p)),
     )}`;
 
-    // Orders FIRST, and deliberately not by cascade: `orders.user_id` is
-    // ON DELETE RESTRICT because an order is a financial record that must
-    // not vanish with an account. That is right for production and means
-    // the sweep has to clear them explicitly — order_items cascade from
-    // the order itself.
+    // Settlements and ledger records reference orders with RESTRICT,
+    // so they must be cleared before deleting orders.
+    await db.execute(
+      sql`delete from settlement_ledger where order_id in (select id from orders where user_id in (${owned}))`,
+    );
+    await db.execute(
+      sql`delete from order_settlements where order_id in (select id from orders where user_id in (${owned}))`,
+    );
+    await db.execute(sql`delete from seller_payouts where id > 0`);
     await db.execute(sql`delete from orders where user_id in (${owned})`);
 
     // Products this suite created. They are RESTRICT-referenced by
