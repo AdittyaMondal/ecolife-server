@@ -54,4 +54,6 @@ export * from './users.ts';
 // Revenue & Settlements (Part 7)
 export * from './settlements.ts';
 export * from './system-settings.ts';
+// Virtual Garden State
+export * from './user-gardens.ts';
 
