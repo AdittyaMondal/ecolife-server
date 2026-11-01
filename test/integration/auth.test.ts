@@ -7,7 +7,7 @@ import {
   rateLimits,
   sessions,
 } from '@database/schema/index.ts';
-import { and, eq, like, ne, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, like, ne, sql } from 'drizzle-orm';
 import { app } from '../../src/app.ts';
 
 /**
@@ -194,7 +194,7 @@ describe('login', () => {
 
 describe('refresh rotation and reuse detection', () => {
   it(
-    'rotates, and revokes the whole family when an old token comes back',
+    'rotates, and treats an immediate replay as a race rather than a theft',
     async () => {
       const { body } = await registerUser();
       const first = body.data.session.refreshToken as string;
@@ -208,23 +208,33 @@ describe('refresh rotation and reuse detection', () => {
       const second = (await json(r1)).data.refreshToken as string;
       expect(second).not.toBe(first);
 
-      // Replaying the first token is the signature of a stolen credential.
+      /**
+       * An IMMEDIATE replay is inside the 10s grace window, and the server
+       * cannot tell it from a second browser tab racing itself — so it is
+       * refused as AUTH_009 and the family survives.
+       *
+       * This is the deliberate cost of the grace window. It used to assert a
+       * 401 and a burned family, which was the behaviour that signed users out
+       * of every device for opening a second tab. The theft case has not been
+       * given up: a replay from OUTSIDE the window still burns everything, and
+       * that is asserted in 'still burns the family for a replay from outside
+       * the grace window' below.
+       */
       const replay = await call('/auth/refresh', {
         method: 'POST',
         headers: { 'x-ecolife-platform': 'ios' },
         body: JSON.stringify({ refreshToken: first }),
       });
-      expect(replay.status).toBe(401);
-      expect((await json(replay)).error.details.reason).toBe('reused');
+      expect(replay.status).toBe(409);
+      expect((await json(replay)).error.details.reason).toBe('raced');
 
-      // ...and the legitimate successor dies with it. Logging the real user out
-      // is the only signal they get that something was wrong.
+      // ...and the legitimate successor LIVES. That is the fix.
       const after = await call('/auth/refresh', {
         method: 'POST',
         headers: { 'x-ecolife-platform': 'ios' },
         body: JSON.stringify({ refreshToken: second }),
       });
-      expect(after.status).toBe(401);
+      expect(after.status).toBe(200);
     },
     TIMEOUT,
   );
@@ -426,31 +436,36 @@ describe('rate limiting', () => {
 
 describe('rotation is atomic under concurrency', () => {
   it(
-    'lets exactly one of ten simultaneous rotations win, and revokes the family',
+    'lets exactly one of ten simultaneous rotations win, and keeps the user signed in',
     async () => {
       const { startSession, rotateSession } = await import('@common/auth/session.ts');
       const { body } = await registerUser();
       const userId = body.data.user.id as number;
 
       const { refreshToken, familyId } = await startSession(userId, 'ios');
-      // The bug this guards: a read-then-write let two concurrent requests both
-      // see revoked_at IS NULL, both pass the check and both rotate — producing
-      // two live tokens and silently defeating reuse detection. That race IS the
-      // attack, because a stolen token used at the same moment as the victim's
-      // would go unnoticed.
+      // Two things are being guarded here, and they pull in opposite directions.
+      //
+      // Atomicity: a read-then-write let two concurrent requests both see
+      // revoked_at IS NULL, both pass the check and both rotate — two live
+      // tokens, and reuse detection silently defeated. Exactly one must win.
+      //
+      // But the losers are NOT an attack. The web app holds one refresh cookie
+      // and each tab is its own JS context, so a second tab produces exactly
+      // this race on a page load. Burning the family here logged people out of
+      // every device for opening a second tab — measured as one 200, one 401
+      // and zero live sessions. Losers are now `raced`, and the family lives.
       const results = await Promise.all(
         Array.from({ length: 10 }, () => rotateSession(refreshToken)),
       );
 
       expect(results.filter((r) => r.ok)).toHaveLength(1);
-      expect(results.filter((r) => !r.ok && r.reason === 'reused')).toHaveLength(9);
+      expect(results.filter((r) => !r.ok && r.reason === 'raced')).toHaveLength(9);
+      expect(results.filter((r) => !r.ok && r.reason === 'reused')).toHaveLength(0);
 
-      // Scoped to THIS family. The registration session is a separate family
-      // and must survive — revoking it would mean one compromised token logged
-      // the user out of unrelated devices.
+      // The winner's new token is live, so the user is still signed in.
       const family = await db.select().from(sessions).where(eq(sessions.familyId, familyId));
       expect(family.length).toBeGreaterThan(1);
-      expect(family.every((r) => r.revokedAt !== null)).toBe(true);
+      expect(family.filter((r) => r.revokedAt === null)).toHaveLength(1);
 
       const others = await db
         .select()
@@ -600,6 +615,98 @@ describe('brute force is blocked even when the guess is right', () => {
         loginBlocked = true;
       }
       expect(loginBlocked).toBe(false);
+    },
+    TIMEOUT,
+  );
+});
+
+/**
+ * The bug: opening the web app in a second tab signed the user out of every
+ * device. One refresh cookie, two JS contexts, two concurrent rotations — the
+ * loser was treated as a replayed stolen token and burned the family.
+ *
+ * The fix is a 10s grace window, so these tests have to hold BOTH ends: a race
+ * must not sign anyone out, and a genuine replay must still burn.
+ */
+describe('a racing refresh does not sign the user out', () => {
+  it(
+    'keeps the session alive when two tabs refresh the same cookie at once',
+    async () => {
+      const { body } = await registerUser();
+      const userId = body.data.user.id as number;
+      const first = body.data.session.refreshToken as string;
+
+      const live = async () =>
+        (await db.select().from(sessions).where(eq(sessions.userId, userId))).filter(
+          (r) => r.revokedAt === null,
+        ).length;
+
+      expect(await live()).toBe(1);
+
+      const [a, b] = await Promise.all([
+        call('/auth/refresh', {
+          method: 'POST',
+          headers: { 'x-ecolife-platform': 'ios' },
+          body: JSON.stringify({ refreshToken: first }),
+        }),
+        call('/auth/refresh', {
+          method: 'POST',
+          headers: { 'x-ecolife-platform': 'ios' },
+          body: JSON.stringify({ refreshToken: first }),
+        }),
+      ]);
+
+      const statuses = [a.status, b.status].sort();
+      expect(statuses).toEqual([200, 409]);
+
+      // 409 + AUTH_009, NOT 401 — a client must never read this as a sign-out.
+      const loser = a.status === 409 ? a : b;
+      expect((await json(loser)).error.code).toBe('AUTH_009');
+
+      // The whole point: the user is still signed in, on exactly one token.
+      expect(await live()).toBe(1);
+
+      const winner = a.status === 200 ? a : b;
+      const rotated = (await json(winner)).data.refreshToken as string;
+      const again = await call('/auth/refresh', {
+        method: 'POST',
+        headers: { 'x-ecolife-platform': 'ios' },
+        body: JSON.stringify({ refreshToken: rotated }),
+      });
+      expect(again.status).toBe(200);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'still burns the family for a replay from outside the grace window',
+    async () => {
+      const { startSession, rotateSession } = await import('@common/auth/session.ts');
+      const { body } = await registerUser();
+      const userId = body.data.user.id as number;
+      const { refreshToken, familyId } = await startSession(userId, 'ios');
+
+      const rotated = await rotateSession(refreshToken);
+      expect(rotated.ok).toBe(true);
+
+      // Age the spent token past the window instead of sleeping ten seconds.
+      // This is the theft case: a token copied earlier and replayed later.
+      // Only the SPENT row. Backdating the whole family would revoke the
+      // winner's live token too, and the test would then pass for the wrong
+      // reason — it must be the grace window that expires, not the session.
+      await db
+        .update(sessions)
+        .set({ revokedAt: new Date(Date.now() - 60_000) })
+        .where(and(eq(sessions.familyId, familyId), isNotNull(sessions.revokedAt)))
+        .execute();
+
+      const replay = await rotateSession(refreshToken);
+      expect(replay.ok).toBe(false);
+      if (!replay.ok) expect(replay.reason).toBe('reused');
+
+      // Every token in the family is dead — the control that matters is intact.
+      const family = await db.select().from(sessions).where(eq(sessions.familyId, familyId));
+      expect(family.every((r) => r.revokedAt !== null)).toBe(true);
     },
     TIMEOUT,
   );

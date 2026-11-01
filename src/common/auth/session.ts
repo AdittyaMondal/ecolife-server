@@ -39,7 +39,27 @@ export async function startSession(
 
 export type RotateResult =
   | { ok: true; userId: number; refreshToken: string }
-  | { ok: false; reason: 'unknown' | 'expired' | 'reused' };
+  | { ok: false; reason: 'unknown' | 'expired' | 'reused' | 'raced' };
+
+/**
+ * How long after a token is rotated a second presentation of it is treated as
+ * a benign race rather than theft.
+ *
+ * `[LESSON]` Without this, two tabs of the web app logged the user out of every
+ * device. The browser holds ONE refresh cookie but each tab is an independent
+ * JS context, so a page load in a second tab fires its own refresh; one wins,
+ * the other was "reused", and the family burned. Reproduced: one 200, one 401,
+ * and zero live sessions left — a hard logout for a user who did nothing.
+ *
+ * Ten seconds separates the two cases well. A racing browser presents the old
+ * token within milliseconds of the winner; an attacker replaying a stolen token
+ * is working from a copy taken earlier and is essentially never inside this
+ * window. Outside it, the family still burns — that control is intact.
+ *
+ * This is refresh-token rotation with a reuse interval, the same shape Auth0
+ * and IdentityServer use.
+ */
+const RACE_GRACE_MS = 10_000;
 
 export async function rotateSession(
   presented: string,
@@ -60,6 +80,12 @@ export async function rotateSession(
    * or not it has also aged out.
    */
   if (row.revokedAt) {
+    // Inside the grace window this is the same browser racing itself, not a
+    // replay. Refuse this ONE call and leave the family alone; the caller
+    // retries and picks up the cookie the winner just set.
+    if (Date.now() - row.revokedAt.getTime() <= RACE_GRACE_MS) {
+      return { ok: false, reason: 'raced' };
+    }
     await db
       .update(sessions)
       .set({ revokedAt: new Date() })
@@ -91,14 +117,14 @@ export async function rotateSession(
     .returning({ id: sessions.id });
 
   if (claimed.length === 0) {
-    // Lost the race, or the token was already spent. Either way it has been
-    // presented twice. Burn the family.
-    await db
-      .update(sessions)
-      .set({ revokedAt: new Date() })
-      .where(and(eq(sessions.familyId, row.familyId), isNull(sessions.revokedAt)))
-      .execute();
-    return { ok: false, reason: 'reused' };
+    /**
+     * Lost the atomic claim. This is ALWAYS a race, never a stale replay: a
+     * token spent earlier would have had `revoked_at` set in the SELECT above
+     * and been handled there. To get here, another request claimed the row
+     * between our read and our write — microseconds, and by definition inside
+     * the grace window. So refuse this call and leave the family alone.
+     */
+    return { ok: false, reason: 'raced' };
   }
 
   const next = mintRefreshToken();
