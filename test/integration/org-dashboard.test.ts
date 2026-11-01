@@ -31,10 +31,16 @@ describe('Organization Dashboard, Analytics & Privacy (Part 3)', () => {
   it(
     'computes organization carbon footprint: total, category breakdown, monthly trend, and per-employee average',
     async () => {
-      const owner = await createOnboardedUser({ email: `corpowner-${crypto.randomUUID().slice(0, 6)}@example.test` });
+      const owner = await createOnboardedUser({
+        email: `corpowner-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
       const admin = await createOnboardedUser({ role: 'admin' });
-      const member1 = await createOnboardedUser({ email: `member1-${crypto.randomUUID().slice(0, 6)}@example.test` });
-      const member2 = await createOnboardedUser({ email: `member2-${crypto.randomUUID().slice(0, 6)}@example.test` });
+      const member1 = await createOnboardedUser({
+        email: `member1-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
+      const member2 = await createOnboardedUser({
+        email: `member2-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
 
       // 1. Create org
       const createRes = await json(
@@ -146,7 +152,9 @@ describe('Organization Dashboard, Analytics & Privacy (Part 3)', () => {
   it(
     'supports employee search, filters, per-user insights, and respects privacy consent',
     async () => {
-      const owner = await createOnboardedUser({ email: `privowner-${crypto.randomUUID().slice(0, 6)}@example.test` });
+      const owner = await createOnboardedUser({
+        email: `privowner-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
       const admin = await createOnboardedUser({ role: 'admin' });
       const sharingMember = await createOnboardedUser({
         name: 'Alice Green',

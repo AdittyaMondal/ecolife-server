@@ -43,6 +43,7 @@ export const organizations = pgTable(
     contactPhone: text('contact_phone'),
     city: text('city'),
     regionCode: text('region_code'),
+    address: text('address'),
     /** Who approved or rejected it, and when. Null while pending. */
     reviewedBy: bigint('reviewed_by', { mode: 'number' }).references(() => users.id, {
       onDelete: 'set null',

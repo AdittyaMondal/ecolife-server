@@ -29,7 +29,9 @@ describe('Organization Code & User Linking (Part 2)', () => {
   it(
     'generates a 6-digit code on creation and supports regeneration by owner',
     async () => {
-      const owner = await createOnboardedUser({ email: `orgowner-${crypto.randomUUID().slice(0, 6)}@example.test` });
+      const owner = await createOnboardedUser({
+        email: `orgowner-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
 
       // Create an organization
       const createRes = await json(
@@ -76,7 +78,9 @@ describe('Organization Code & User Linking (Part 2)', () => {
   it(
     'validates code lookup: rejects missing/pending and accepts approved organizations',
     async () => {
-      const owner = await createOnboardedUser({ email: `orgowner2-${crypto.randomUUID().slice(0, 6)}@example.test` });
+      const owner = await createOnboardedUser({
+        email: `orgowner2-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
       const admin = await createOnboardedUser({ role: 'admin' });
 
       // 1. Missing code lookup
@@ -134,7 +138,9 @@ describe('Organization Code & User Linking (Part 2)', () => {
   it(
     'links user on signup with valid code, rejects invalid/pending codes',
     async () => {
-      const owner = await createOnboardedUser({ email: `orgowner3-${crypto.randomUUID().slice(0, 6)}@example.test` });
+      const owner = await createOnboardedUser({
+        email: `orgowner3-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
       const admin = await createOnboardedUser({ role: 'admin' });
 
       // Create and approve org

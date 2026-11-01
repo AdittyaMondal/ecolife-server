@@ -35,8 +35,8 @@ export * from './lifestyle-profiles.ts';
 // Supporting
 export * from './notifications.ts';
 export * from './orders.ts';
-export * from './organizations.ts';
 export * from './organization-questions.ts';
+export * from './organizations.ts';
 // Marketplace
 export * from './products.ts';
 export * from './push-tokens.ts';

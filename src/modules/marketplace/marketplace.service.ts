@@ -3,6 +3,7 @@ import { decodeIdCursor, type Page, toPage } from '@common/pagination.ts';
 import { award } from '@common/rewards/rewards.ts';
 import { env } from '@config/env.ts';
 import { db } from '@database/client.ts';
+import * as orgRepo from '@modules/organizations/organizations.repository.ts';
 import * as profileRepo from '@modules/profile/profile.repository.ts';
 import * as repo from './marketplace.repository.ts';
 
@@ -22,6 +23,56 @@ const MAX_LINE_QUANTITY = 20;
 const paisePerCoin = () => 100 / env.COINS_PER_RUPEE;
 
 type CartLine = Awaited<ReturnType<typeof repo.listCart>>[number];
+
+export function calculateEffectivePrice(product: {
+  pricePaise: number;
+  discountType?: 'none' | 'percentage' | 'fixed' | null;
+  discountValue?: number | null;
+  discountStartDate?: Date | string | null;
+  discountEndDate?: Date | string | null;
+}): number {
+  const now = new Date();
+  if (product.discountStartDate && new Date(product.discountStartDate) > now) {
+    return product.pricePaise;
+  }
+  if (product.discountEndDate && new Date(product.discountEndDate) < now) {
+    return product.pricePaise;
+  }
+  if (product.discountType === 'percentage' && product.discountValue && product.discountValue > 0) {
+    const discount = Math.floor((product.pricePaise * product.discountValue) / 100);
+    return Math.max(0, product.pricePaise - discount);
+  }
+  if (product.discountType === 'fixed' && product.discountValue && product.discountValue > 0) {
+    return Math.max(0, product.pricePaise - product.discountValue);
+  }
+  return product.pricePaise;
+}
+
+export function serialiseProduct(p: any) {
+  const effectivePricePaise = calculateEffectivePrice(p);
+  return {
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    description: p.description,
+    category: p.category,
+    pricePaise: p.pricePaise,
+    effectivePricePaise,
+    imageUrl: p.imageUrl,
+    images:
+      Array.isArray(p.images) && p.images.length > 0 ? p.images : p.imageUrl ? [p.imageUrl] : [],
+    stock: p.stock,
+    co2SavedKg: p.co2SavedKg,
+    sellerOrgId: p.sellerOrgId ?? null,
+    discountType: p.discountType ?? 'none',
+    discountValue: p.discountValue ?? 0,
+    discountStartDate: p.discountStartDate ? new Date(p.discountStartDate).toISOString() : null,
+    discountEndDate: p.discountEndDate ? new Date(p.discountEndDate).toISOString() : null,
+    allowCoinRedemption: p.allowCoinRedemption ?? true,
+    maxCoinRedemptionPercent: p.maxCoinRedemptionPercent ?? 20,
+    isActive: p.isActive ?? true,
+  };
+}
 
 export type Quote = {
   items: {
@@ -50,12 +101,15 @@ export type Quote = {
  * user adjusts, and the ORDER path is where an impossible spend is refused.
  */
 export function quote(lines: CartLine[], coinsBalance: number, offeredCoins: number): Quote {
-  const items = lines.map((l) => ({
-    productId: l.product.id,
-    product: l.product,
-    quantity: l.quantity,
-    lineTotalPaise: l.product.pricePaise * l.quantity,
-  }));
+  const items = lines.map((l) => {
+    const effectivePrice = calculateEffectivePrice(l.product);
+    return {
+      productId: l.product.id,
+      product: l.product,
+      quantity: l.quantity,
+      lineTotalPaise: effectivePrice * l.quantity,
+    };
+  });
 
   const subtotalPaise = items.reduce((n, i) => n + i.lineTotalPaise, 0);
   const maxDiscountPaise = Math.floor((subtotalPaise * env.MAX_DISCOUNT_PCT) / 100);
@@ -99,13 +153,13 @@ export async function products(query: {
     afterId: decodeIdCursor(query.cursor),
     limit: query.limit,
   });
-  return toPage(rows, query.limit, (r) => r.id);
+  return toPage(rows.map(serialiseProduct), query.limit, (r) => r.id);
 }
 
 export async function product(slug: string) {
   const row = await repo.findProductBySlug(slug);
   if (!row) throw new DomainError('SHOP_005', 'Product not found.', 404);
-  return row;
+  return serialiseProduct(row);
 }
 
 export const cart = (userId: number) => quoteFor(userId, 0);
@@ -220,9 +274,11 @@ export async function placeOrder(userId: number, body: PlaceOrderBody) {
       priced.items.map((i) => ({
         orderId: order.id,
         productId: i.productId,
+        sellerOrgId: i.product.sellerOrgId ?? null,
         productName: i.product.name,
         unitPaise: i.product.pricePaise,
         quantity: i.quantity,
+        status: 'placed' as const,
       })),
     );
 
@@ -381,4 +437,179 @@ function serialiseAddress(a: repo.AddressRow) {
     pincode: a.pincode,
     isDefault: a.isDefault,
   };
+}
+
+// --- Seller Portal Service Methods (Part 6) --------------------------------
+
+export async function assertSeller(userId: number) {
+  const membership = await orgRepo.findMembership(userId);
+  if (!membership) {
+    throw new DomainError('ORG_001', 'You do not belong to an organization.', 403);
+  }
+  if (membership.type !== 'seller') {
+    throw new DomainError(
+      'ORG_005',
+      'Only Marketplace Partners (sellers) have access to the Seller Portal.',
+      403,
+    );
+  }
+  if (membership.status !== 'approved') {
+    throw new DomainError(
+      'ORG_002',
+      'Your seller organization is pending review or suspended.',
+      403,
+      {
+        status: membership.status,
+      },
+    );
+  }
+  return membership;
+}
+
+function uniqueProductSlug(name: string): string {
+  const base =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48) || 'product';
+  return `${base}-${crypto.randomUUID().slice(0, 6)}`;
+}
+
+export async function sellerProducts(
+  userId: number,
+  query: {
+    category?: string;
+    status: 'all' | 'active' | 'inactive';
+    q?: string;
+    cursor?: string;
+    limit: number;
+  },
+) {
+  const org = await assertSeller(userId);
+  const rows = await repo.listSellerProducts({
+    sellerOrgId: org.id,
+    category: query.category,
+    status: query.status,
+    q: query.q,
+    afterId: decodeIdCursor(query.cursor),
+    limit: query.limit,
+  });
+  return toPage(rows.map(serialiseProduct), query.limit, (r) => r.id);
+}
+
+export async function createSellerProduct(userId: number, body: any) {
+  const org = await assertSeller(userId);
+  const slug = body.slug?.trim() || uniqueProductSlug(body.name);
+
+  const images =
+    Array.isArray(body.images) && body.images.length > 0
+      ? body.images
+      : body.imageUrl
+        ? [body.imageUrl]
+        : [];
+
+  const row = await repo.insertProduct({
+    name: body.name.trim(),
+    slug,
+    description: body.description?.trim() ?? null,
+    category: body.category,
+    pricePaise: body.pricePaise,
+    imageUrl: body.imageUrl ?? (images[0] || null),
+    images,
+    stock: body.stock ?? 0,
+    co2SavedKg: body.co2SavedKg ?? null,
+    discountType: body.discountType ?? 'none',
+    discountValue: body.discountValue ?? 0,
+    discountStartDate: body.discountStartDate ? new Date(body.discountStartDate) : null,
+    discountEndDate: body.discountEndDate ? new Date(body.discountEndDate) : null,
+    allowCoinRedemption: body.allowCoinRedemption ?? true,
+    maxCoinRedemptionPercent: body.maxCoinRedemptionPercent ?? 20,
+    sellerOrgId: org.id,
+    isActive: body.isActive ?? true,
+  });
+
+  return serialiseProduct(row);
+}
+
+export async function sellerProduct(userId: number, id: number) {
+  const org = await assertSeller(userId);
+  const row = await repo.findSellerProduct(org.id, id);
+  if (!row) throw new DomainError('SHOP_005', 'Product not found.', 404);
+  return serialiseProduct(row);
+}
+
+export async function updateSellerProduct(userId: number, id: number, body: any) {
+  const org = await assertSeller(userId);
+  const existing = await repo.findSellerProduct(org.id, id);
+  if (!existing) throw new DomainError('SHOP_005', 'Product not found.', 404);
+
+  const values: Record<string, any> = {};
+  if (body.name !== undefined) values.name = body.name.trim();
+  if (body.description !== undefined) values.description = body.description?.trim() ?? null;
+  if (body.category !== undefined) values.category = body.category;
+  if (body.pricePaise !== undefined) values.pricePaise = body.pricePaise;
+  if (body.imageUrl !== undefined) values.imageUrl = body.imageUrl;
+  if (body.images !== undefined) values.images = body.images;
+  if (body.stock !== undefined) values.stock = body.stock;
+  if (body.co2SavedKg !== undefined) values.co2SavedKg = body.co2SavedKg;
+  if (body.discountType !== undefined) values.discountType = body.discountType;
+  if (body.discountValue !== undefined) values.discountValue = body.discountValue;
+  if (body.discountStartDate !== undefined)
+    values.discountStartDate = body.discountStartDate ? new Date(body.discountStartDate) : null;
+  if (body.discountEndDate !== undefined)
+    values.discountEndDate = body.discountEndDate ? new Date(body.discountEndDate) : null;
+  if (body.allowCoinRedemption !== undefined) values.allowCoinRedemption = body.allowCoinRedemption;
+  if (body.maxCoinRedemptionPercent !== undefined)
+    values.maxCoinRedemptionPercent = body.maxCoinRedemptionPercent;
+  if (body.isActive !== undefined) values.isActive = body.isActive;
+
+  const row = await repo.updateSellerProduct(org.id, id, values);
+  if (!row) throw new DomainError('SHOP_005', 'Product not found.', 404);
+  return serialiseProduct(row);
+}
+
+export async function deleteSellerProduct(userId: number, id: number) {
+  const org = await assertSeller(userId);
+  const existing = await repo.findSellerProduct(org.id, id);
+  if (!existing) throw new DomainError('SHOP_005', 'Product not found.', 404);
+
+  await repo.deleteSellerProduct(org.id, id);
+  return { deleted: true as const };
+}
+
+export async function sellerOrders(
+  userId: number,
+  query: {
+    status?: string;
+    onlyRedemptions?: boolean;
+    cursor?: string;
+    limit: number;
+  },
+) {
+  const org = await assertSeller(userId);
+  const rows = await repo.listSellerOrders({
+    sellerOrgId: org.id,
+    status: query.status,
+    onlyRedemptions: query.onlyRedemptions,
+    afterId: decodeIdCursor(query.cursor),
+    limit: query.limit,
+  });
+  return toPage(rows, query.limit, (r) => r.id);
+}
+
+export async function updateSellerOrderStatus(
+  userId: number,
+  orderId: number,
+  status: 'placed' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled',
+) {
+  const org = await assertSeller(userId);
+  const res = await repo.updateSellerOrderStatus(org.id, orderId, status);
+  if (!res) throw new DomainError('SHOP_008', 'Order not found for this seller.', 404);
+  return { success: true as const, status };
+}
+
+export async function sellerAnalytics(userId: number) {
+  const org = await assertSeller(userId);
+  return repo.getSellerAnalytics(org.id);
 }

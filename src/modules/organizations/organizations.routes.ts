@@ -15,13 +15,13 @@ import {
   lookupQuerySchema,
   lookupResultSchema,
   myOrganizationSchema,
-  orgEmployeeAnswersSchema,
-  orgOnboardingStatusSchema,
-  orgQuestionSchema,
   organizationAnalyticsSchema,
   organizationMemberListSchema,
   organizationQuerySchema,
   organizationSchema,
+  orgEmployeeAnswersSchema,
+  orgOnboardingStatusSchema,
+  orgQuestionSchema,
   regenerateCodeResultSchema,
   reorderOrgQuestionsBodySchema,
   reviewOrganizationBodySchema,
@@ -137,11 +137,7 @@ organizationRoutes.openapi(
   async (c) =>
     ok(
       c,
-      await service.members(
-        c.get('user').id,
-        c.req.valid('param').id,
-        c.req.valid('query'),
-      ),
+      await service.members(c.get('user').id, c.req.valid('param').id, c.req.valid('query')),
       200,
     ),
 );
@@ -164,8 +160,7 @@ organizationRoutes.openapi(
       404: errorResponses[404],
     },
   }),
-  async (c) =>
-    ok(c, await service.analytics(c.get('user').id, c.req.valid('param').id), 200),
+  async (c) => ok(c, await service.analytics(c.get('user').id, c.req.valid('param').id), 200),
 );
 
 organizationRoutes.openapi(
@@ -372,8 +367,7 @@ organizationRoutes.openapi(
       404: errorResponses[404],
     },
   }),
-  async (c) =>
-    ok(c, await service.listQuestions(c.get('user').id, c.req.valid('param').id), 200),
+  async (c) => ok(c, await service.listQuestions(c.get('user').id, c.req.valid('param').id), 200),
 );
 
 organizationRoutes.openapi(
@@ -402,11 +396,7 @@ organizationRoutes.openapi(
   async (c) =>
     ok(
       c,
-      await service.createQuestion(
-        c.get('user').id,
-        c.req.valid('param').id,
-        c.req.valid('json'),
-      ),
+      await service.createQuestion(c.get('user').id, c.req.valid('param').id, c.req.valid('json')),
       201,
     ),
 );
@@ -417,7 +407,8 @@ organizationRoutes.openapi(
     path: '/{id}/questions/{questionId}',
     tags: ['organizations'],
     summary: 'Update a custom onboarding question (owner only)',
-    description: 'Updating the prompt or type increments the question version so previous answers remain faithful snapshots.',
+    description:
+      'Updating the prompt or type increments the question version so previous answers remain faithful snapshots.',
     middleware: [requireUser] as const,
     security: secured,
     request: {

@@ -4,13 +4,13 @@
 > Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
 > fails CI when this file is stale.
 
-**Version** 0.1.0 · **Base path** `/api/v1` · **76 paths** · **91 operations** · **113 schemas**
+**Version** 0.1.0 · **Base path** `/api/v1` · **81 paths** · **99 operations** · **119 schemas**
 
 ---
 
 ## Before you read this
 
-**Every endpoint below is implemented.** All 91 operations run against the real
+**Every endpoint below is implemented.** All 99 operations run against the real
 database; none returns `GEN_501` any more. Point your client at the server, not
 at the mock — the mock serves the *examples* in this document, so it will happily
 return a plausible shape for a request the real server would reject.
@@ -69,6 +69,7 @@ an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` acce
 - [gamification](#gamification) — 3 operations
 - [leaderboard](#leaderboard) — 2 operations
 - [marketplace](#marketplace) — 14 operations
+- [seller](#seller) — 8 operations
 - [events](#events) — 14 operations
 - [organizations](#organizations) — 22 operations
 - [reference](#reference) — 5 operations
@@ -909,7 +910,7 @@ Weights are relative, not percentages: divide one by the sum of the active tiers
 | `name` | string | yes | e.g. `"Adittya"` |
 | `phone` | string | yes | e.g. `"+919876543210"` |
 | `line1` | string | yes | e.g. `"12 Hill Road"` |
-| `line2` | string,null | yes |  |
+| `line2` | string,null | no |  |
 | `city` | string | yes | e.g. `"Mumbai"` |
 | `state` | string | yes | e.g. `"Maharashtra"` |
 | `pincode` | string | yes | e.g. `"400050"` |
@@ -1189,6 +1190,229 @@ THERE IS NO PAYMENT STEP, and this is the design, not an omission: PRD-v2 §6.5 
 | Code | Meaning | `data` |
 |---|---|---|
 | `200` | Product | [`Product`](#product) |
+| `404` | Not found | null |
+
+---
+
+## seller
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/seller/analytics`](#get-api-v1-seller-analytics) 🔒 | Seller sales and earnings reports |
+| `GET` | [`/api/v1/seller/orders`](#get-api-v1-seller-orders) 🔒 | List orders containing seller items |
+| `PATCH` | [`/api/v1/seller/orders/{id}/status`](#patch-api-v1-seller-orders-id-status) 🔒 | Update fulfillment status of an order |
+| `GET` | [`/api/v1/seller/products`](#get-api-v1-seller-products) 🔒 | List own products |
+| `POST` | [`/api/v1/seller/products`](#post-api-v1-seller-products) 🔒 | Create a product |
+| `DELETE` | [`/api/v1/seller/products/{id}`](#delete-api-v1-seller-products-id) 🔒 | Delete or deactivate product |
+| `GET` | [`/api/v1/seller/products/{id}`](#get-api-v1-seller-products-id) 🔒 | Get seller product detail |
+| `PATCH` | [`/api/v1/seller/products/{id}`](#patch-api-v1-seller-products-id) 🔒 | Update seller product |
+
+### `GET` `/api/v1/seller/analytics`
+
+**Seller sales and earnings reports**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Seller analytics | [`SellerAnalytics`](#selleranalytics) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `GET` `/api/v1/seller/orders`
+
+**List orders containing seller items**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `status` | query | no | `placed` \| `confirmed` \| `shipped` \| `delivered` \| `cancelled` | e.g. `"placed"` |
+| `onlyRedemptions` | query | no | boolean,null |  |
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Seller orders | object |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `PATCH` `/api/v1/seller/orders/{id}/status`
+
+**Update fulfillment status of an order**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required) — [`UpdateSellerOrderStatusBody`](#updatesellerorderstatusbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `status` | `placed` \| `confirmed` \| `shipped` \| `delivered` \| `cancelled` | yes | e.g. `"placed"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Status updated | object |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+### `GET` `/api/v1/seller/products`
+
+**List own products**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `category` | query | no | `plants` \| `household` \| `personal_care` \| `kitchen` \| `stationery` | e.g. `"plants"` |
+| `status` | query | no | `all` \| `active` \| `inactive` | default `"all"` |
+| `q` | query | no | string |  |
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Seller products | object |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `POST` `/api/v1/seller/products`
+
+**Create a product**
+
+🔒 Requires a bearer token.
+
+**Request body** (required) — [`CreateSellerProductBody`](#createsellerproductbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | yes | e.g. `"Eco Bamboo Toothbrush"` |
+| `slug` | string | no | e.g. `"eco-bamboo-toothbrush"` |
+| `description` | string | no | e.g. `"100% biodegradable handle with charcoal bristles."` |
+| `category` | `plants` \| `household` \| `personal_care` \| `kitchen` \| `stationery` | yes | e.g. `"plants"` |
+| `pricePaise` | integer | yes | Base price in paise. e.g. `19900`. range 0…∞ |
+| `imageUrl` | string,null (uri) | no | e.g. `"https://images.unsplash.com/photo-1592150621744"` |
+| `images` | string[] | no | default `[]` |
+| `stock` | integer | no | e.g. `50`. range 0…∞. default `0` |
+| `co2SavedKg` | number,null | no | e.g. `0.5`. range 0…∞ |
+| `discountType` | `none` \| `percentage` \| `fixed` | no | e.g. `"percentage"` |
+| `discountValue` | integer | no | range 0…∞ |
+| `discountStartDate` | string,null | no | e.g. `"2026-11-01T00:00:00.000Z"` |
+| `discountEndDate` | string,null | no | e.g. `"2026-11-30T23:59:59.000Z"` |
+| `allowCoinRedemption` | boolean | no |  |
+| `maxCoinRedemptionPercent` | integer | no | range 0…100 |
+| `isActive` | boolean | no |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `201` | Product created | [`Product`](#product) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `DELETE` `/api/v1/seller/products/{id}`
+
+**Delete or deactivate product**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Deleted | object |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+### `GET` `/api/v1/seller/products/{id}`
+
+**Get seller product detail**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Product detail | [`Product`](#product) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+### `PATCH` `/api/v1/seller/products/{id}`
+
+**Update seller product**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required) — [`UpdateSellerProductBody`](#updatesellerproductbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | no | e.g. `"Eco Bamboo Toothbrush"` |
+| `slug` | string | no | e.g. `"eco-bamboo-toothbrush"` |
+| `description` | string | no | e.g. `"100% biodegradable handle with charcoal bristles."` |
+| `category` | `plants` \| `household` \| `personal_care` \| `kitchen` \| `stationery` | no | e.g. `"plants"` |
+| `pricePaise` | integer | no | Base price in paise. e.g. `19900`. range 0…∞ |
+| `imageUrl` | string,null (uri) | no | e.g. `"https://images.unsplash.com/photo-1592150621744"` |
+| `images` | string[] | no | default `[]` |
+| `stock` | integer | no | e.g. `50`. range 0…∞. default `0` |
+| `co2SavedKg` | number,null | no | e.g. `0.5`. range 0…∞ |
+| `discountType` | `none` \| `percentage` \| `fixed` | no | e.g. `"percentage"` |
+| `discountValue` | integer | no | range 0…∞ |
+| `discountStartDate` | string,null | no | e.g. `"2026-11-01T00:00:00.000Z"` |
+| `discountEndDate` | string,null | no | e.g. `"2026-11-30T23:59:59.000Z"` |
+| `allowCoinRedemption` | boolean | no |  |
+| `maxCoinRedemptionPercent` | integer | no | range 0…100 |
+| `isActive` | boolean | no |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Product updated | [`Product`](#product) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
 | `404` | Not found | null |
 
 ---
@@ -1693,6 +1917,7 @@ Creates it as `pending` and makes the caller its owner. It stays unusable until 
 | `contactPhone` | string | no |  |
 | `city` | string | no |  |
 | `regionCode` | string | no |  |
+| `address` | string | no |  |
 | `verificationDetails` | object | no |  |
 
 **Responses**
@@ -1729,6 +1954,7 @@ Creates it as `pending` and makes the caller its owner. It stays unusable until 
 | `contactPhone` | string | no |  |
 | `city` | string | no |  |
 | `regionCode` | string | no |  |
+| `address` | string | no |  |
 | `verificationDetails` | object | no |  |
 | `logoUrl` | string,null (uri) | no | Any https URL the caller controls, or one returned by POST /uploads/presign.. e.g. `"https://images.unsplash.com/photo-1607346256330-dee7af15f7c5?auto=format&fit=facearea&facepad=3&w=256&h=256&q=70"` |
 
@@ -2290,7 +2516,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 
 ## Schemas
 
-113 named components.
+119 named components.
 
 ### ActiveGoalSummary
 
@@ -2324,7 +2550,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `name` | string | yes | e.g. `"Adittya"` |
 | `phone` | string | yes | e.g. `"+919876543210"` |
 | `line1` | string | yes | e.g. `"12 Hill Road"` |
-| `line2` | string,null | yes |  |
+| `line2` | string,null | no |  |
 | `city` | string | yes | e.g. `"Mumbai"` |
 | `state` | string | yes | e.g. `"Maharashtra"` |
 | `pincode` | string | yes | e.g. `"400050"` |
@@ -2337,7 +2563,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `name` | string | yes | e.g. `"Adittya"` |
 | `phone` | string | yes | e.g. `"+919876543210"` |
 | `line1` | string | yes | e.g. `"12 Hill Road"` |
-| `line2` | string,null | yes |  |
+| `line2` | string,null | no |  |
 | `city` | string | yes | e.g. `"Mumbai"` |
 | `state` | string | yes | e.g. `"Maharashtra"` |
 | `pincode` | string | yes | e.g. `"400050"` |
@@ -2465,6 +2691,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `contactPhone` | string | no |  |
 | `city` | string | no |  |
 | `regionCode` | string | no |  |
+| `address` | string | no |  |
 | `verificationDetails` | object | no |  |
 
 ### CreateOrgQuestionBody
@@ -2476,6 +2703,27 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `type` | [`OrgQuestionType`](#orgquestiontype) | yes |  |
 | `options` | string[] | no |  |
 | `required` | boolean | no | e.g. `false`. default `false` |
+
+### CreateSellerProductBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | yes | e.g. `"Eco Bamboo Toothbrush"` |
+| `slug` | string | no | e.g. `"eco-bamboo-toothbrush"` |
+| `description` | string | no | e.g. `"100% biodegradable handle with charcoal bristles."` |
+| `category` | `plants` \| `household` \| `personal_care` \| `kitchen` \| `stationery` | yes | e.g. `"plants"` |
+| `pricePaise` | integer | yes | Base price in paise. e.g. `19900`. range 0…∞ |
+| `imageUrl` | string,null (uri) | no | e.g. `"https://images.unsplash.com/photo-1592150621744"` |
+| `images` | string[] | no | default `[]` |
+| `stock` | integer | no | e.g. `50`. range 0…∞. default `0` |
+| `co2SavedKg` | number,null | no | e.g. `0.5`. range 0…∞ |
+| `discountType` | `none` \| `percentage` \| `fixed` | no | e.g. `"percentage"` |
+| `discountValue` | integer | no | range 0…∞ |
+| `discountStartDate` | string,null | no | e.g. `"2026-11-01T00:00:00.000Z"` |
+| `discountEndDate` | string,null | no | e.g. `"2026-11-30T23:59:59.000Z"` |
+| `allowCoinRedemption` | boolean | no |  |
+| `maxCoinRedemptionPercent` | integer | no | range 0…100 |
+| `isActive` | boolean | no |  |
 
 ### DailyAnswers
 
@@ -2941,6 +3189,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `contactPhone` | string,null | yes | e.g. `"+912012345678"` |
 | `city` | string,null | yes | e.g. `"Pune"` |
 | `regionCode` | string,null | yes | e.g. `"IN-MH"` |
+| `address` | string,null | no | e.g. `"Plot 42, MIDC, Pune"` |
 | `memberCount` | integer | yes | e.g. `12` |
 | `reviewNote` | string,null | yes |  |
 | `verificationDetails` | object,null | no |  |
@@ -3131,9 +3380,20 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `description` | string,null | yes | e.g. `"Grown without synthetic fertiliser."` |
 | `category` | `plants` \| `household` \| `personal_care` \| `kitchen` \| `stationery` | yes | e.g. `"plants"` |
 | `pricePaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `effectivePricePaise` | integer | no | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
 | `imageUrl` | string,null | yes | e.g. `"https://images.unsplash.com/photo-1592150621744-aca64f48394a?auto=format&fit=crop&w=800&q=80"` |
+| `images` | string[] | no | default `[]` |
 | `stock` | integer | yes | e.g. `34` |
 | `co2SavedKg` | number,null | yes | Why the product exists. Shown on the card.. e.g. `21.9` |
+| `sellerOrgId` | integer,null | no |  |
+| `sellerName` | string,null | no |  |
+| `discountType` | `none` \| `percentage` \| `fixed` | no | e.g. `"percentage"`. default `"none"` |
+| `discountValue` | integer | no | range 0…∞. default `0` |
+| `discountStartDate` | string,null | no |  |
+| `discountEndDate` | string,null | no |  |
+| `allowCoinRedemption` | boolean | no | default `true` |
+| `maxCoinRedemptionPercent` | integer | no | range 0…100. default `20` |
+| `isActive` | boolean | no | default `true` |
 
 ### ProfilePatchBody
 
@@ -3261,6 +3521,48 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `capacity` | integer | yes | e.g. `100` |
 | `attendeeReward` | [`RewardGrant`](#rewardgrant) \| null | yes | Null when already checked in — the reward was granted on the first scan |
 
+### SellerAnalytics
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `totalSalesVolumePaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `cashRevenuePaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `coinsRedeemedDiscountPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `totalCoinsRedeemed` | integer | yes | e.g. `1250` |
+| `totalOrdersCount` | integer | yes | e.g. `45` |
+| `totalUnitsSoldCount` | integer | yes | e.g. `88` |
+| `activeProductsCount` | integer | yes | e.g. `12` |
+| `topProducts` | object[] | yes |  |
+| `monthlySales` | object[] | yes |  |
+
+### SellerOrder
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `101` |
+| `orderNumber` | string | yes | e.g. `"ECO-2026-00042"` |
+| `createdAt` | string | yes | e.g. `"2026-11-01T10:00:00.000Z"` |
+| `status` | `placed` \| `confirmed` \| `shipped` \| `delivered` \| `cancelled` | yes | e.g. `"placed"` |
+| `customer` | object | yes |  |
+| `address` | [`Address`](#address) \| null | yes |  |
+| `items` | [`SellerOrderItem`](#sellerorderitem)[] | yes |  |
+| `sellerSubtotalPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `sellerCoinsSpent` | integer | yes | e.g. `100` |
+| `sellerDiscountPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `sellerTotalPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+
+### SellerOrderItem
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `1` |
+| `productId` | integer | yes | e.g. `12` |
+| `productName` | string | yes | e.g. `"Bamboo Toothbrush"` |
+| `unitPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `quantity` | integer | yes | e.g. `2` |
+| `totalPaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
+| `status` | `placed` \| `confirmed` \| `shipped` \| `delivered` \| `cancelled` | yes | e.g. `"placed"` |
+
 ### Session
 
 | Field | Type | Required | Notes |
@@ -3374,6 +3676,7 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `contactPhone` | string | no |  |
 | `city` | string | no |  |
 | `regionCode` | string | no |  |
+| `address` | string | no |  |
 | `verificationDetails` | object | no |  |
 | `logoUrl` | string,null (uri) | no | Any https URL the caller controls, or one returned by POST /uploads/presign.. e.g. `"https://images.unsplash.com/photo-1607346256330-dee7af15f7c5?auto=format&fit=facearea&facepad=3&w=256&h=256&q=70"` |
 
@@ -3386,6 +3689,33 @@ Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 | `type` | [`OrgQuestionType`](#orgquestiontype) | no |  |
 | `options` | array,null | no |  |
 | `required` | boolean | no |  |
+
+### UpdateSellerOrderStatusBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `status` | `placed` \| `confirmed` \| `shipped` \| `delivered` \| `cancelled` | yes | e.g. `"placed"` |
+
+### UpdateSellerProductBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | no | e.g. `"Eco Bamboo Toothbrush"` |
+| `slug` | string | no | e.g. `"eco-bamboo-toothbrush"` |
+| `description` | string | no | e.g. `"100% biodegradable handle with charcoal bristles."` |
+| `category` | `plants` \| `household` \| `personal_care` \| `kitchen` \| `stationery` | no | e.g. `"plants"` |
+| `pricePaise` | integer | no | Base price in paise. e.g. `19900`. range 0…∞ |
+| `imageUrl` | string,null (uri) | no | e.g. `"https://images.unsplash.com/photo-1592150621744"` |
+| `images` | string[] | no | default `[]` |
+| `stock` | integer | no | e.g. `50`. range 0…∞. default `0` |
+| `co2SavedKg` | number,null | no | e.g. `0.5`. range 0…∞ |
+| `discountType` | `none` \| `percentage` \| `fixed` | no | e.g. `"percentage"` |
+| `discountValue` | integer | no | range 0…∞ |
+| `discountStartDate` | string,null | no | e.g. `"2026-11-01T00:00:00.000Z"` |
+| `discountEndDate` | string,null | no | e.g. `"2026-11-30T23:59:59.000Z"` |
+| `allowCoinRedemption` | boolean | no |  |
+| `maxCoinRedemptionPercent` | integer | no | range 0…100 |
+| `isActive` | boolean | no |  |
 
 ### UserSummary
 

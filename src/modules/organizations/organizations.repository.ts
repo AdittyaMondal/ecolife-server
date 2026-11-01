@@ -45,6 +45,7 @@ const ORG_COLUMNS = {
   contactPhone: organizations.contactPhone,
   city: organizations.city,
   regionCode: organizations.regionCode,
+  address: organizations.address,
   reviewNote: organizations.reviewNote,
   verificationDetails: organizations.verificationDetails,
   reviewedAt: organizations.reviewedAt,
@@ -101,7 +102,10 @@ export async function findByCode(code: string, tx: Executor = db) {
   const trimmed = code.trim();
 
   // 1. Check exact match on 6-digit organization code
-  const [byCode] = await tx.select(ORG_COLUMNS).from(organizations).where(eq(organizations.code, trimmed));
+  const [byCode] = await tx
+    .select(ORG_COLUMNS)
+    .from(organizations)
+    .where(eq(organizations.code, trimmed));
   if (byCode) return byCode;
 
   // 2. Check slug match
@@ -482,10 +486,7 @@ export async function listQuestions(
     );
 }
 
-export async function findQuestionById(
-  id: number,
-  tx: Executor = db,
-): Promise<QuestionRow | null> {
+export async function findQuestionById(id: number, tx: Executor = db): Promise<QuestionRow | null> {
   const [row] = await tx
     .select()
     .from(organizationOnboardingQuestions)

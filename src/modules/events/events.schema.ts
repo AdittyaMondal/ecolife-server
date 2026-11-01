@@ -44,7 +44,11 @@ export const eventSchema = z
     endAt: z.string().openapi({ example: '2026-11-02T04:00:00.000Z' }),
     venueName: z.string().openapi({ example: 'Versova Beach' }),
     venueAddress: z.string().nullable().openapi({ example: 'Versova, Andheri West, Mumbai' }),
-    venueMapUrl: z.string().nullable().optional().openapi({ example: 'https://maps.google.com/?q=Versova+Beach' }),
+    venueMapUrl: z
+      .string()
+      .nullable()
+      .optional()
+      .openapi({ example: 'https://maps.google.com/?q=Versova+Beach' }),
     latitude: z.number().nullable().openapi({ example: 19.1351 }),
     longitude: z.number().nullable().openapi({ example: 72.8126 }),
     capacity: z.number().int().openapi({ example: 100 }),
@@ -73,7 +77,10 @@ export const eventListQuerySchema = z.object({
     .default('upcoming')
     .openapi({ param: { name: 'filter', in: 'query' } }),
   type: eventTypeSchema.optional().openapi({ param: { name: 'type', in: 'query' } }),
-  search: z.string().optional().openapi({ param: { name: 'search', in: 'query' } }),
+  search: z
+    .string()
+    .optional()
+    .openapi({ param: { name: 'search', in: 'query' } }),
   organizationId: z.coerce
     .number()
     .int()
