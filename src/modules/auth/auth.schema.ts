@@ -13,7 +13,7 @@ export const emailSchema = z.string().email().max(254).openapi({ example: 'yusuf
  */
 export const passwordSchema = z
   .string()
-  .min(6)
+  .min(10)
   .max(200)
   .openapi({ example: 'correct horse battery' });
 
@@ -24,19 +24,27 @@ export const registerBodySchema = z
     password: passwordSchema,
     phone: z.string().min(8).max(20).optional().openapi({ example: '+919876543210' }),
     timezone: z.string().default('Asia/Kolkata').openapi({ example: 'Asia/Kolkata' }),
-    organizationCode: z
-      .string()
-      .trim()
-      .min(6)
-      .max(20)
-      .optional()
-      .openapi({
-        example: '482910',
-        description: 'Optional 6-digit organization code to link user upon signup',
-      }),
+    organizationCode: z.string().trim().min(6).max(20).optional().openapi({
+      example: '482910',
+      description: 'Optional 6-digit organization code to link user upon signup',
+    }),
   })
   .openapi('RegisterBody');
 
+/**
+ * Login does NOT reuse `passwordSchema`, and must not.
+ *
+ * Validating password STRENGTH on sign-in is a bug, not a control: every
+ * account created before a policy change is locked out by its own password,
+ * and the 400 leaks that the submitted value is too short to be the stored
+ * one. Strength is enforced where a password is CHOSEN — register and reset.
+ * `min(1)` here only rejects an empty body field.
+ *
+ * This split is why `passwordSchema` is back to 10: it was dropped to 6 so a
+ * short dev-seed password could sign in, which the min(1) below already
+ * handles. The seed never passes through this schema at all — `seedUsers`
+ * hashes with Bun.password.hash directly.
+ */
 export const loginBodySchema = z
   .object({ email: emailSchema, password: z.string().min(1).max(200) })
   .openapi('LoginBody');

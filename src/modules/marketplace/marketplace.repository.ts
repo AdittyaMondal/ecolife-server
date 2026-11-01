@@ -522,25 +522,54 @@ export async function listSellerOrders(opts: {
   });
 }
 
-export async function updateSellerOrderStatus(
+export type OrderItemStatus = 'placed' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+
+/**
+ * Every item on an order, whoever sells it.
+ *
+ * The order-level status is DERIVED from all of them, so the derivation needs
+ * to see the lines this seller does not own. Row-locked, so two sellers moving
+ * their own lines at the same moment cannot both compute the order status from
+ * a stale read and have the loser's answer win.
+ */
+export async function lockOrderItems(orderId: number, tx: Executor) {
+  return tx
+    .select({
+      id: orderItems.id,
+      productId: orderItems.productId,
+      quantity: orderItems.quantity,
+      sellerOrgId: orderItems.sellerOrgId,
+      status: orderItems.status,
+    })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, orderId))
+    .for('update');
+}
+
+/** Only this seller's lines. Scoped in the WHERE, so a foreign order matches nothing. */
+export async function setSellerItemsStatus(
   sellerOrgId: number,
   orderId: number,
-  status: 'placed' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled',
-  tx: Executor = db,
+  status: OrderItemStatus,
+  tx: Executor,
 ) {
-  // Update order items for this seller
-  const updatedItems = await tx
+  return tx
     .update(orderItems)
     .set({ status })
     .where(and(eq(orderItems.orderId, orderId), eq(orderItems.sellerOrgId, sellerOrgId)))
     .returning();
+}
 
-  if (updatedItems.length === 0) return null;
-
-  // Also sync overall order status if appropriate
+export async function setOrderStatus(orderId: number, status: OrderItemStatus, tx: Executor) {
   await tx.update(orders).set({ status }).where(eq(orders.id, orderId));
+}
 
-  return updatedItems;
+/** Puts stock back. The mirror of `decrementStock`, for a cancelled line. */
+export async function restoreStock(productId: number, quantity: number, tx: Executor) {
+  await tx
+    .update(products)
+    .set({ stock: sql`${products.stock} + ${quantity}` })
+    .where(eq(products.id, productId));
 }
 
 export async function getSellerAnalytics(sellerOrgId: number) {

@@ -92,6 +92,7 @@ into the client repos' copy of this file.
 | `SHOP_006` | 422 | Cart is empty. |
 | `SHOP_007` | 404 | No such delivery address **for this user**. Someone else's address returns this same 404. |
 | `SHOP_008` | 404 | No such order **for this user**. |
+| `SHOP_009` | 422 | Illegal order-item status transition. `details.from` / `details.to`. The allowed moves are placed→confirmed/cancelled, confirmed→shipped/cancelled, shipped→delivered; `delivered` and `cancelled` are terminal. |
 
 ## Rewards
 

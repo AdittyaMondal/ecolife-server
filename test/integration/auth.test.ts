@@ -120,7 +120,17 @@ describe('register', () => {
     async () => {
       const res = await call('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ name: 'X', email: email(), password: 'short', timezone: 'UTC' }),
+        // NINE characters, deliberately. The previous value was 'short' (5),
+        // which is rejected at a minimum of 10 AND at 6 — so this test sat
+        // green straight through passwordSchema being lowered to 6 and could
+        // never have caught it. One below the limit is the only value that
+        // actually asserts the limit.
+        body: JSON.stringify({
+          name: 'X',
+          email: email(),
+          password: 'abcdefghi',
+          timezone: 'UTC',
+        }),
       });
       expect(res.status).toBe(400);
       expect((await json(res)).error.code).toBe('GEN_400');

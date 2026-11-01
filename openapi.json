@@ -327,7 +327,7 @@
           },
           "password": {
             "type": "string",
-            "minLength": 6,
+            "minLength": 10,
             "maxLength": 200,
             "example": "correct horse battery"
           },
@@ -433,7 +433,7 @@
           },
           "password": {
             "type": "string",
-            "minLength": 6,
+            "minLength": 10,
             "maxLength": 200,
             "example": "correct horse battery"
           }
@@ -9253,12 +9253,27 @@
                             "shipped",
                             "delivered",
                             "cancelled"
-                          ]
+                          ],
+                          "example": "shipped",
+                          "description": "The status this seller's own items now carry."
+                        },
+                        "orderStatus": {
+                          "type": "string",
+                          "enum": [
+                            "placed",
+                            "confirmed",
+                            "shipped",
+                            "delivered",
+                            "cancelled"
+                          ],
+                          "example": "confirmed",
+                          "description": "The whole order, DERIVED from every seller's items: the least advanced live item, or cancelled when all items are. On a multi-seller order this will lag `status` until the other sellers catch up."
                         }
                       },
                       "required": [
                         "success",
-                        "status"
+                        "status",
+                        "orderStatus"
                       ]
                     },
                     "error": {
@@ -9296,6 +9311,16 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Domain rule violation",
             "content": {
               "application/json": {
                 "schema": {

@@ -112,7 +112,29 @@ export function quote(lines: CartLine[], coinsBalance: number, offeredCoins: num
   });
 
   const subtotalPaise = items.reduce((n, i) => n + i.lineTotalPaise, 0);
-  const maxDiscountPaise = Math.floor((subtotalPaise * env.MAX_DISCOUNT_PCT) / 100);
+
+  /**
+   * Two ceilings, and the discount obeys the LOWER of them.
+   *
+   * `MAX_DISCOUNT_PCT` is the global 20% rule (PRD-v2 §4.3), enforced in the
+   * database by `orders_discount_within_cap`. The per-line ceiling is the
+   * seller's own: `allowCoinRedemption` and `maxCoinRedemptionPercent` were
+   * stored on `products` and then never read, so a product that opted out of
+   * coin redemption still got discounted, and one that capped itself at 5%
+   * still absorbed the full 20%. Summing each line's own allowance gives the
+   * most coins this particular basket can absorb.
+   *
+   * Taking the min keeps the database CHECK satisfied by construction: the
+   * result can only ever be smaller than the global cap, never larger.
+   */
+  const globalCapPaise = Math.floor((subtotalPaise * env.MAX_DISCOUNT_PCT) / 100);
+  const lineCapPaise = items.reduce((n, i) => {
+    const p = i.product;
+    if (p.allowCoinRedemption === false) return n;
+    const pct = p.maxCoinRedemptionPercent ?? env.MAX_DISCOUNT_PCT;
+    return n + Math.floor((i.lineTotalPaise * pct) / 100);
+  }, 0);
+  const maxDiscountPaise = Math.min(globalCapPaise, lineCapPaise);
 
   const coinsSpent = Math.max(
     0,
@@ -276,7 +298,14 @@ export async function placeOrder(userId: number, body: PlaceOrderBody) {
         productId: i.productId,
         sellerOrgId: i.product.sellerOrgId ?? null,
         productName: i.product.name,
-        unitPaise: i.product.pricePaise,
+        /**
+         * The price CHARGED, not the list price. An order item is a financial
+         * record; snapshotting `pricePaise` while the line total was computed
+         * from the discounted price made the row disagree with its own order,
+         * so `unitPaise * quantity` did not reconcile against
+         * `orders.subtotal_paise` and seller analytics over-reported revenue.
+         */
+        unitPaise: calculateEffectivePrice(i.product),
         quantity: i.quantity,
         status: 'placed' as const,
       })),
@@ -300,7 +329,8 @@ export async function placeOrder(userId: number, body: PlaceOrderBody) {
 
     const items = priced.items.map((i) => ({
       productName: i.product.name,
-      unitPaise: i.product.pricePaise,
+      // Must match what was just written to order_items, above.
+      unitPaise: calculateEffectivePrice(i.product),
       quantity: i.quantity,
     }));
     return serialiseOrder(order, items, address);
@@ -463,6 +493,22 @@ export async function assertSeller(userId: number) {
       },
     );
   }
+  /**
+   * OWNER, not merely a member.
+   *
+   * `POST /organizations/join` grants membership to anyone who presents the
+   * organization's six-digit code — no owner approval, and that module has no
+   * rate limit. Checking only `type === 'seller'` therefore handed the entire
+   * Seller Portal (edit their products, move their order statuses, read their
+   * revenue) to anyone who learned or guessed a seller's join code. Joining by
+   * code always lands `role: 'member'`, so requiring owner closes the path.
+   *
+   * If sellers ever need staff accounts, that wants an explicit seller-staff
+   * role an owner grants — not the absence of a check.
+   */
+  if (membership.role !== 'owner') {
+    throw new DomainError('ORG_004', 'Only an organization owner can do that.', 403);
+  }
   return membership;
 }
 
@@ -598,15 +644,101 @@ export async function sellerOrders(
   return toPage(rows, query.limit, (r) => r.id);
 }
 
+/**
+ * The only legal moves. Anything absent is refused rather than silently applied.
+ *
+ * Without this, `PATCH /seller/orders/{id}/status` accepted `delivered` ->
+ * `placed`, and a cancelled line could be resurrected and shipped.
+ */
+export const ORDER_TRANSITIONS: Record<repo.OrderItemStatus, repo.OrderItemStatus[]> = {
+  placed: ['confirmed', 'cancelled'],
+  confirmed: ['shipped', 'cancelled'],
+  shipped: ['delivered'],
+  delivered: [],
+  cancelled: [],
+};
+
+/** How far through fulfilment a status is. Used to pick an order's weakest line. */
+const FULFILMENT_RANK: Record<repo.OrderItemStatus, number> = {
+  placed: 0,
+  confirmed: 1,
+  shipped: 2,
+  delivered: 3,
+  cancelled: 4,
+};
+
+/**
+ * An order's status, derived from its lines rather than asserted by one seller.
+ *
+ * Every line cancelled means the order is cancelled. Otherwise the order is
+ * only as far along as its LEAST advanced live line: a buyer whose second
+ * seller has not shipped yet does not have a shipped order.
+ */
+export function deriveOrderStatus(statuses: repo.OrderItemStatus[]): repo.OrderItemStatus {
+  const live = statuses.filter((x) => x !== 'cancelled');
+  if (live.length === 0) return 'cancelled';
+  return live.reduce((a, b) => (FULFILMENT_RANK[b] < FULFILMENT_RANK[a] ? b : a));
+}
+
 export async function updateSellerOrderStatus(
   userId: number,
   orderId: number,
-  status: 'placed' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled',
+  status: repo.OrderItemStatus,
 ) {
   const org = await assertSeller(userId);
-  const res = await repo.updateSellerOrderStatus(org.id, orderId, status);
-  if (!res) throw new DomainError('SHOP_008', 'Order not found for this seller.', 404);
-  return { success: true as const, status };
+
+  return db.transaction(async (tx) => {
+    const all = await repo.lockOrderItems(orderId, tx);
+    const mine = all.filter((i) => i.sellerOrgId === org.id);
+    if (mine.length === 0) {
+      throw new DomainError('SHOP_008', 'Order not found for this seller.', 404);
+    }
+
+    // Every line this seller owns has to be allowed to make the move. A
+    // partially-legal batch is refused whole rather than half-applied.
+    for (const item of mine) {
+      if (item.status === status) continue;
+      if (!ORDER_TRANSITIONS[item.status].includes(status)) {
+        throw new DomainError(
+          'SHOP_009',
+          `An order item cannot go from ${item.status} to ${status}.`,
+          422,
+          { from: item.status, to: status },
+        );
+      }
+    }
+
+    const updated = await repo.setSellerItemsStatus(org.id, orderId, status, tx);
+
+    /**
+     * Cancelling returns the stock it reserved at checkout, in the same
+     * transaction as the status change so the two cannot disagree.
+     *
+     * `ponytail:` the COINS spent on a cancelled line are not refunded. The
+     * order carries one discount for the whole basket, and splitting it across
+     * sellers is a product decision (pro-rata by line total? refuse partial
+     * cancellation of a discounted order?), not something to guess at inside a
+     * status handler. Upgrade path: attribute the discount per line at
+     * checkout, then refund through `award()` with source `order_refund` —
+     * which already exists in the enum and has no call sites.
+     */
+    if (status === 'cancelled') {
+      for (const item of mine) {
+        if (item.status !== 'cancelled') {
+          await repo.restoreStock(item.productId, item.quantity, tx);
+        }
+      }
+    }
+
+    // Derived, never asserted: this seller's move only decides THEIR lines.
+    const byId = new Map(updated.map((u) => [u.id, u.status as repo.OrderItemStatus]));
+    const orderStatus = deriveOrderStatus(
+      all.map((i) => byId.get(i.id) ?? (i.status as repo.OrderItemStatus)),
+    );
+    await repo.setOrderStatus(orderId, orderStatus, tx);
+
+    return { success: true as const, status, orderStatus };
+  });
 }
 
 export async function sellerAnalytics(userId: number) {

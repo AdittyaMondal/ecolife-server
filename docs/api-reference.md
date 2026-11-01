@@ -1270,6 +1270,7 @@ THERE IS NO PAYMENT STEP, and this is the design, not an omission: PRD-v2 §6.5 
 | `401` | Not authenticated | null |
 | `403` | Not authorised | null |
 | `404` | Not found | null |
+| `422` | Domain rule violation | null |
 
 ### `GET` `/api/v1/seller/products`
 
