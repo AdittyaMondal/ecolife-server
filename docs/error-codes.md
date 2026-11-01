@@ -29,7 +29,7 @@ into the client repos' copy of this file.
 
 | Code | HTTP | Meaning |
 |---|---|---|
-| `AUTH_001` | 401 | Invalid credentials. Deliberately identical for unknown email and wrong password. |
+| `AUTH_001` | 401 | Invalid credentials. Deliberately identical for unknown email and wrong password. Also returned by `POST /auth/google` for **every** Google-side rejection — bad or expired token, an audience that is not one of ours, an unverified Google email, or Google being unreachable. One message for all of them on purpose: naming the failed check would make the endpoint an oracle for probing client ids and which addresses exist. |
 | `AUTH_002` | 401 | Access token expired — refresh and retry. |
 | `AUTH_003` | 401 | Refresh token invalid or replayed. The whole token family is revoked. |
 | `AUTH_004` | 403 | Email not verified. **Never returned.** Earning is still gated (PRD-v2 §4.4), but the gate SKIPS the award instead of failing the request: an unverified user logs a day normally and gets `reward.pointsDelta: 0`. Refusing the core action over a bonus was the old behaviour and it was wrong. Read `user.emailVerified` to explain the zero. |

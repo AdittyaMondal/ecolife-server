@@ -21,6 +21,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import {
   authResultSchema,
   forgotPasswordBodySchema,
+  googleBodySchema,
   loginBodySchema,
   meSchema,
   okMessageSchema,
@@ -164,6 +165,72 @@ authRoutes.openapi(
       await consumeFailedAttempt(c, body.email, BUCKETS.authStrict);
       throw err;
     }
+    return ok(
+      c,
+      {
+        session: {
+          accessToken: r.accessToken,
+          accessTokenExpiresIn: r.expiresIn,
+          refreshToken: deliverRefresh(c, r.refreshToken),
+        },
+        user: service.publicUser(r.user, r.membership, await service.profileState(r.user.id)),
+      },
+      200,
+    );
+  },
+);
+
+authRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/google',
+    tags: ['auth'],
+    summary: 'Sign in with Google',
+    description:
+      'Send the Google ACCESS token obtained natively. The server verifies it with Google and ' +
+      'pins the token audience to GOOGLE_OAUTH_CLIENT_IDS before trusting the email, so a ' +
+      'token minted by another app is refused. Matches on the verified, lowercased email: an ' +
+      'existing account is signed in (and its email marked verified if it was not), otherwise ' +
+      'one is created with no usable password — set one later via forgot-password. ' +
+      'Session delivery is identical to /auth/login: send `x-ecolife-platform: ios|android` ' +
+      'for `session.refreshToken` in the body, otherwise it is an httpOnly cookie.',
+    request: { ...body(googleBodySchema), headers: platformHeader },
+    responses: {
+      200: jsonOk(authResultSchema, 'Signed in'),
+      400: errorResponses[400],
+      401: errorResponses[401],
+      429: errorResponses[429],
+    },
+  }),
+  async (c) => {
+    const { accessToken, timezone } = c.req.valid('json');
+
+    // Same per-IP bucket as /auth/login. This endpoint mints sessions, and
+    // each attempt costs two outbound calls to Google, so it is both an
+    // account-probing surface and an easy way to burn our own quota.
+    await consumeForIp(c, BUCKETS.authStrict);
+
+    let r: Awaited<ReturnType<typeof service.googleSignIn>>;
+    try {
+      r = await service.googleSignIn(accessToken, timezone, metaOf(c));
+    } catch (err) {
+      /**
+       * Every Google-side rejection collapses to one opaque 401.
+       *
+       * Bad token, expired token, foreign audience, unverified email and
+       * "Google is down" are deliberately indistinguishable: telling a caller
+       * WHICH check failed turns this into an oracle for discovering valid
+       * client ids and probing which addresses exist. A DomainError thrown
+       * deeper (our own 409s and 422s) is re-thrown untouched.
+       *
+       * The access token is never logged — not here, not in the verifier,
+       * which reports status codes only.
+       */
+      if (err instanceof DomainError) throw err;
+      console.warn('[auth/google] rejected:', err instanceof Error ? err.message : 'unknown');
+      throw new DomainError('AUTH_001', 'Google sign-in was not accepted.', 401);
+    }
+
     return ok(
       c,
       {

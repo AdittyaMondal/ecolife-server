@@ -38,11 +38,16 @@ export async function createUser(input: {
   phone?: string;
   timezone: string;
   emailVerifiedAt?: Date;
+  /** Only ever an https URL, validated by the caller. Null to leave unset. */
+  avatarUrl?: string | null;
 }) {
   const [row] = await db
     .insert(users)
     .values({ ...input, email: input.email.toLowerCase() })
     .returning();
+  // An insert with RETURNING that yields no row cannot happen; making the
+  // return type optional only pushes a null check onto every caller.
+  if (!row) throw new Error('user insert returned nothing');
   return row;
 }
 

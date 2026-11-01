@@ -106,6 +106,31 @@ const envSchema = z.object({
   /** Deep-link scheme used by event passes: ecolife://pass/{code} */
   MOBILE_SCHEME: z.string().min(1).default('ecolife'),
 
+  /**
+   * OAuth client ids accepted by `POST /auth/google`, comma-separated.
+   *
+   * Not optional with a default, and not hardcoded. The audience check IS the
+   * security boundary of Google sign-in: a Google access token is just a
+   * bearer token for Google's APIs, and any app can mint one for its own
+   * client. Without pinning `aud`/`azp` to ids we own, anyone could take a
+   * token their own app obtained and exchange it for an EcoLife session for
+   * whatever email it carries. Defaulting to empty would make that bypass the
+   * behaviour whenever the variable is forgotten, so an empty value is a
+   * startup failure instead.
+   *
+   * One entry per platform client (Android, iOS, Web) as they are added.
+   */
+  GOOGLE_OAUTH_CLIENT_IDS: z
+    .string()
+    .min(1)
+    .transform((v) =>
+      v
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    )
+    .refine((ids) => ids.length > 0, 'at least one Google OAuth client id is required'),
+
   // --- Economy (PRD-v2 §4.3). Server-authoritative; clients only preview. ---
   COINS_PER_RUPEE: z.coerce.number().int().positive().default(10),
   MAX_DISCOUNT_PCT: z.coerce.number().int().min(1).max(100).default(20),

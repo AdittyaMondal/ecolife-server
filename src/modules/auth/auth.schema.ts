@@ -1,5 +1,5 @@
 import { nullable } from '@common/openapi/envelope.ts';
-import { walletSchema } from '@common/openapi/shared-schemas.ts';
+import { timezoneSchema, walletSchema } from '@common/openapi/shared-schemas.ts';
 import { z } from '@hono/zod-openapi';
 
 /** PRD-v2 §6.1. Two clients, two token transports, one endpoint set. */
@@ -48,6 +48,28 @@ export const registerBodySchema = z
 export const loginBodySchema = z
   .object({ email: emailSchema, password: z.string().min(1).max(200) })
   .openapi('LoginBody');
+
+/**
+ * Sign in with Google (PRD-v2 §6.1).
+ *
+ * The client sends the Google ACCESS token it obtained natively. The server
+ * verifies it with Google before trusting any email — see
+ * `@common/auth/google.ts`; the audience check is what keeps this from being
+ * an account-takeover endpoint.
+ *
+ * `max(4096)` so an oversized body is refused by the validator rather than
+ * forwarded to Google. Real Google access tokens are a few hundred bytes.
+ */
+export const googleBodySchema = z
+  .object({
+    accessToken: z
+      .string()
+      .min(1)
+      .max(4096)
+      .openapi({ example: 'ya29.a0AfB_byC...', description: 'Google OAuth access token' }),
+    timezone: timezoneSchema.default('Asia/Kolkata'),
+  })
+  .openapi('GoogleSignInBody');
 
 /**
  * The refresh token is returned in the body for the mobile client, which stores

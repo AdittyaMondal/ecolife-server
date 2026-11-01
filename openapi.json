@@ -376,6 +376,28 @@
           "password"
         ]
       },
+      "GoogleSignInBody": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "example": "ya29.a0AfB_byC...",
+            "description": "Google OAuth access token"
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "default": "Asia/Kolkata",
+            "example": "Asia/Kolkata"
+          }
+        },
+        "required": [
+          "accessToken"
+        ]
+      },
       "RefreshBody": {
         "type": "object",
         "properties": {
@@ -6084,6 +6106,104 @@
                     "data",
                     "error"
                   ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited — see Retry-After",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sign in with Google",
+        "description": "Send the Google ACCESS token obtained natively. The server verifies it with Google and pins the token audience to GOOGLE_OAUTH_CLIENT_IDS before trusting the email, so a token minted by another app is refused. Matches on the verified, lowercased email: an existing account is signed in (and its email marked verified if it was not), otherwise one is created with no usable password — set one later via forgot-password. Session delivery is identical to /auth/login: send `x-ecolife-platform: ios|android` for `session.refreshToken` in the body, otherwise it is an httpOnly cookie.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ios",
+                "android",
+                "web"
+              ],
+              "example": "android",
+              "description": "Send ios or android to receive session.refreshToken in the response body. Omitted or web: the token is set as an httpOnly cookie and the body field is null."
+            },
+            "required": false,
+            "description": "Send ios or android to receive session.refreshToken in the response body. Omitted or web: the token is set as an httpOnly cookie and the body field is null.",
+            "name": "x-ecolife-platform",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleSignInBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuthResult"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
                 }
               }
             }
