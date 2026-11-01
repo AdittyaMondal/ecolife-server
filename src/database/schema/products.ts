@@ -7,11 +7,12 @@ import {
   doublePrecision,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
 } from 'drizzle-orm/pg-core';
-import { productCategory } from './enums.ts';
+import { discountType, productCategory } from './enums.ts';
 import { organizations } from './organizations.ts';
 
 /**
@@ -31,8 +32,18 @@ export const products = pgTable(
     category: productCategory('category').notNull(),
     pricePaise: integer('price_paise').notNull(),
     imageUrl: text('image_url'),
+    images: jsonb('images').$type<string[]>().notNull().default([]),
     stock: integer('stock').notNull().default(0),
     co2SavedKg: doublePrecision('co2_saved_kg'),
+    /**
+     * Pricing & discounts (Requirement 23)
+     */
+    discountType: discountType('discount_type').notNull().default('none'),
+    discountValue: integer('discount_value').notNull().default(0),
+    discountStartDate: timestamp('discount_start_date', { withTimezone: true }),
+    discountEndDate: timestamp('discount_end_date', { withTimezone: true }),
+    allowCoinRedemption: boolean('allow_coin_redemption').notNull().default(true),
+    maxCoinRedemptionPercent: integer('max_coin_redemption_percent').notNull().default(20),
     /**
      * The seller that owns this row, once the Seller Portal exists. Nullable
      * because today's catalogue is admin-managed and unowned. Added now rather
@@ -47,9 +58,13 @@ export const products = pgTable(
   },
   (t) => [
     check('products_price_non_negative', sql`${t.pricePaise} >= 0`),
-    // A conditional stock decrement can never drive this below zero, and if a
-    // bug tries, the write fails rather than overselling.
     check('products_stock_non_negative', sql`${t.stock} >= 0`),
+    check('products_discount_value_non_negative', sql`${t.discountValue} >= 0`),
+    check(
+      'products_max_coins_pct_valid',
+      sql`${t.maxCoinRedemptionPercent} >= 0 AND ${t.maxCoinRedemptionPercent} <= 100`,
+    ),
     index('products_category_idx').on(t.category, t.isActive),
+    index('products_seller_idx').on(t.sellerOrgId, t.isActive),
   ],
 );

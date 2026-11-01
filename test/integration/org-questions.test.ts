@@ -29,8 +29,12 @@ describe('Custom Onboarding Questions & Answers (Part 4)', () => {
   it(
     'supports question builder CRUD, versioning on edit, and reordering (owner only)',
     async () => {
-      const owner = await createOnboardedUser({ email: `corpowner-${crypto.randomUUID().slice(0, 6)}@example.test` });
-      const member = await createOnboardedUser({ email: `member-${crypto.randomUUID().slice(0, 6)}@example.test` });
+      const owner = await createOnboardedUser({
+        email: `corpowner-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
+      const member = await createOnboardedUser({
+        email: `member-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
       const admin = await createOnboardedUser({ role: 'admin' });
 
       // 1. Create and approve org
@@ -233,8 +237,12 @@ describe('Custom Onboarding Questions & Answers (Part 4)', () => {
   it(
     'allows employees to fetch onboarding questions, validates answers, and exposes snapshot in owner insights',
     async () => {
-      const owner = await createOnboardedUser({ email: `owner-${crypto.randomUUID().slice(0, 6)}@example.test` });
-      const employee = await createOnboardedUser({ email: `emp-${crypto.randomUUID().slice(0, 6)}@example.test` });
+      const owner = await createOnboardedUser({
+        email: `owner-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
+      const employee = await createOnboardedUser({
+        email: `emp-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
       const admin = await createOnboardedUser({ role: 'admin' });
 
       // Create & approve org

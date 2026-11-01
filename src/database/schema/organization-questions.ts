@@ -36,9 +36,7 @@ export const organizationOnboardingQuestions = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index('org_questions_org_idx').on(t.organizationId, t.active, t.sortOrder),
-  ],
+  (t) => [index('org_questions_org_idx').on(t.organizationId, t.active, t.sortOrder)],
 );
 
 /**

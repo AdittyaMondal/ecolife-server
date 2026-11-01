@@ -45,6 +45,7 @@ function serialise(org: OrgRow, forAdmin: boolean, forOwnOwner = false) {
     contactPhone: org.contactPhone,
     city: org.city,
     regionCode: org.regionCode,
+    address: org.address ?? null,
     memberCount: Number(org.memberCount ?? 0),
     reviewNote: forAdmin ? org.reviewNote : null,
     /**
@@ -104,6 +105,7 @@ export type CreateBody = {
   contactPhone?: string;
   city?: string;
   regionCode?: string;
+  address?: string;
   verificationDetails?: Record<string, unknown>;
 };
 
@@ -187,6 +189,7 @@ export async function update(userId: number, organizationId: number, body: Updat
     'contactPhone',
     'city',
     'regionCode',
+    'address',
     'logoUrl',
   ] as const) {
     if (body[key] !== undefined) patch[key] = body[key];
@@ -273,9 +276,7 @@ export async function members(
             ? Number(Number(r.last30DaysTotalKg).toFixed(1))
             : null,
         avgDailyKg:
-          canViewFootprint && r.avgDailyKg != null
-            ? Number(Number(r.avgDailyKg).toFixed(2))
-            : null,
+          canViewFootprint && r.avgDailyKg != null ? Number(Number(r.avgDailyKg).toFixed(2)) : null,
         reductionPct:
           canViewFootprint && r.reductionPct != null
             ? Number(Number(r.reductionPct).toFixed(1))
@@ -347,10 +348,7 @@ export async function analytics(userId: number, organizationId: number) {
   const reductionVsUrbanPct =
     dailyPerCapitaKg > 0 && dailyPerCapitaKg < urbanBenchmarkDailyKg
       ? Number(
-          (
-            ((urbanBenchmarkDailyKg - dailyPerCapitaKg) / urbanBenchmarkDailyKg) *
-            100
-          ).toFixed(1),
+          (((urbanBenchmarkDailyKg - dailyPerCapitaKg) / urbanBenchmarkDailyKg) * 100).toFixed(1),
         )
       : 0;
 
@@ -662,10 +660,7 @@ function serialiseAnswer(a: repo.AnswerRow) {
 
 function validateAnswerValue(question: repo.QuestionRow, val: unknown) {
   const isMissing =
-    val === null ||
-    val === undefined ||
-    val === '' ||
-    (Array.isArray(val) && val.length === 0);
+    val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0);
 
   if (isMissing) {
     if (question.required) {
@@ -687,25 +682,45 @@ function validateAnswerValue(question: repo.QuestionRow, val: unknown) {
       break;
     case 'yes_no':
       if (typeof val !== 'boolean') {
-        throw new DomainError('ORG_017', `Answer for "${question.prompt}" must be true or false.`, 400);
+        throw new DomainError(
+          'ORG_017',
+          `Answer for "${question.prompt}" must be true or false.`,
+          400,
+        );
       }
       break;
     case 'single_choice':
       if (typeof val !== 'string') {
-        throw new DomainError('ORG_017', `Answer for "${question.prompt}" must be a selected option.`, 400);
+        throw new DomainError(
+          'ORG_017',
+          `Answer for "${question.prompt}" must be a selected option.`,
+          400,
+        );
       }
       if (question.options && question.options.length > 0 && !question.options.includes(val)) {
-        throw new DomainError('ORG_017', `"${val}" is not an option for "${question.prompt}".`, 400);
+        throw new DomainError(
+          'ORG_017',
+          `"${val}" is not an option for "${question.prompt}".`,
+          400,
+        );
       }
       break;
     case 'multiple_choice':
       if (!Array.isArray(val) || !val.every((v) => typeof v === 'string')) {
-        throw new DomainError('ORG_017', `Answer for "${question.prompt}" must be an array of selected options.`, 400);
+        throw new DomainError(
+          'ORG_017',
+          `Answer for "${question.prompt}" must be an array of selected options.`,
+          400,
+        );
       }
       if (question.options && question.options.length > 0) {
         for (const opt of val) {
           if (!question.options.includes(opt)) {
-            throw new DomainError('ORG_017', `"${opt}" is not a valid option for "${question.prompt}".`, 400);
+            throw new DomainError(
+              'ORG_017',
+              `"${opt}" is not a valid option for "${question.prompt}".`,
+              400,
+            );
           }
         }
       }
@@ -736,7 +751,11 @@ export async function createQuestion(
     (body.type === 'single_choice' || body.type === 'multiple_choice') &&
     (!body.options || body.options.length < 2)
   ) {
-    throw new DomainError('ORG_014', 'Single choice and multiple choice questions require at least 2 options.', 400);
+    throw new DomainError(
+      'ORG_014',
+      'Single choice and multiple choice questions require at least 2 options.',
+      400,
+    );
   }
 
   const created = await repo.createQuestion(organizationId, {
@@ -770,7 +789,11 @@ export async function updateQuestion(
     (effectiveType === 'single_choice' || effectiveType === 'multiple_choice') &&
     (!effectiveOptions || effectiveOptions.length < 2)
   ) {
-    throw new DomainError('ORG_014', 'Single choice and multiple choice questions require at least 2 options.', 400);
+    throw new DomainError(
+      'ORG_014',
+      'Single choice and multiple choice questions require at least 2 options.',
+      400,
+    );
   }
 
   const updated = await repo.updateQuestion(questionId, body);
@@ -791,11 +814,7 @@ export async function reorderQuestions(
   return { ok: true as const };
 }
 
-export async function deleteQuestion(
-  userId: number,
-  organizationId: number,
-  questionId: number,
-) {
+export async function deleteQuestion(userId: number, organizationId: number, questionId: number) {
   await assertOwner(userId, organizationId);
 
   const existing = await repo.findQuestionById(questionId);
@@ -858,7 +877,11 @@ export async function submitOnboardingAnswers(
   for (const item of body.answers) {
     const q = questionMap.get(item.questionId);
     if (!q) {
-      throw new DomainError('ORG_015', `Question #${item.questionId} not found in this organization.`, 400);
+      throw new DomainError(
+        'ORG_015',
+        `Question #${item.questionId} not found in this organization.`,
+        400,
+      );
     }
     validateAnswerValue(q, item.answer);
 

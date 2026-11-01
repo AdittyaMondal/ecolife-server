@@ -30,7 +30,10 @@ export const registerBodySchema = z
       .min(6)
       .max(20)
       .optional()
-      .openapi({ example: '482910', description: 'Optional 6-digit organization code to link user upon signup' }),
+      .openapi({
+        example: '482910',
+        description: 'Optional 6-digit organization code to link user upon signup',
+      }),
   })
   .openapi('RegisterBody');
 

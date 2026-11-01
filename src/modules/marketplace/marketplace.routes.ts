@@ -9,11 +9,18 @@ import {
   addressBodySchema,
   addressSchema,
   cartQuoteSchema,
+  createSellerProductBodySchema,
   orderSchema,
   placeOrderBodySchema,
   previewBodySchema,
   productQuerySchema,
   productSchema,
+  sellerAnalyticsSchema,
+  sellerOrderQuerySchema,
+  sellerOrderSchema,
+  sellerProductQuerySchema,
+  updateSellerOrderStatusBodySchema,
+  updateSellerProductBodySchema,
 } from './marketplace.schema.ts';
 import * as service from './marketplace.service.ts';
 
@@ -324,4 +331,198 @@ addressRoutes.openapi(
     },
   }),
   async (c) => ok(c, await service.deleteAddress(c.get('user').id, c.req.valid('param').id), 200),
+);
+
+// --- Seller Portal Routes (Part 6) ------------------------------------------
+
+export const sellerRoutes = createModule();
+
+sellerRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/products',
+    tags: ['seller'],
+    summary: 'List own products',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: { query: sellerProductQuerySchema },
+    responses: {
+      200: jsonOk(paginated(productSchema), 'Seller products'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+    },
+  }),
+  async (c) => ok(c, await service.sellerProducts(c.get('user').id, c.req.valid('query')), 200),
+);
+
+sellerRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/products',
+    tags: ['seller'],
+    summary: 'Create a product',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      body: {
+        content: { 'application/json': { schema: createSellerProductBodySchema } },
+        required: true,
+      },
+    },
+    responses: {
+      201: jsonOk(productSchema, 'Product created'),
+      400: errorResponses[400],
+      401: errorResponses[401],
+      403: errorResponses[403],
+    },
+  }),
+  async (c) => ok(c, await service.createSellerProduct(c.get('user').id, c.req.valid('json')), 201),
+);
+
+sellerRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/products/{id}',
+    tags: ['seller'],
+    summary: 'Get seller product detail',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: { params: idParam },
+    responses: {
+      200: jsonOk(productSchema, 'Product detail'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) => ok(c, await service.sellerProduct(c.get('user').id, c.req.valid('param').id), 200),
+);
+
+sellerRoutes.openapi(
+  createRoute({
+    method: 'patch',
+    path: '/products/{id}',
+    tags: ['seller'],
+    summary: 'Update seller product',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      params: idParam,
+      body: {
+        content: { 'application/json': { schema: updateSellerProductBodySchema } },
+        required: true,
+      },
+    },
+    responses: {
+      200: jsonOk(productSchema, 'Product updated'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(
+      c,
+      await service.updateSellerProduct(
+        c.get('user').id,
+        c.req.valid('param').id,
+        c.req.valid('json'),
+      ),
+      200,
+    ),
+);
+
+sellerRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/products/{id}',
+    tags: ['seller'],
+    summary: 'Delete or deactivate product',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: { params: idParam },
+    responses: {
+      200: jsonOk(z.object({ deleted: z.literal(true) }), 'Deleted'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(c, await service.deleteSellerProduct(c.get('user').id, c.req.valid('param').id), 200),
+);
+
+sellerRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/orders',
+    tags: ['seller'],
+    summary: 'List orders containing seller items',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: { query: sellerOrderQuerySchema },
+    responses: {
+      200: jsonOk(paginated(sellerOrderSchema), 'Seller orders'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+    },
+  }),
+  async (c) => ok(c, await service.sellerOrders(c.get('user').id, c.req.valid('query')), 200),
+);
+
+sellerRoutes.openapi(
+  createRoute({
+    method: 'patch',
+    path: '/orders/{id}/status',
+    tags: ['seller'],
+    summary: 'Update fulfillment status of an order',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      params: idParam,
+      body: {
+        content: { 'application/json': { schema: updateSellerOrderStatusBodySchema } },
+        required: true,
+      },
+    },
+    responses: {
+      200: jsonOk(
+        z.object({
+          success: z.literal(true),
+          status: z.enum(['placed', 'confirmed', 'shipped', 'delivered', 'cancelled']),
+        }),
+        'Status updated',
+      ),
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(
+      c,
+      await service.updateSellerOrderStatus(
+        c.get('user').id,
+        c.req.valid('param').id,
+        c.req.valid('json').status,
+      ),
+      200,
+    ),
+);
+
+sellerRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/analytics',
+    tags: ['seller'],
+    summary: 'Seller sales and earnings reports',
+    middleware: [requireUser] as const,
+    security: secured,
+    responses: {
+      200: jsonOk(sellerAnalyticsSchema, 'Seller analytics'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+    },
+  }),
+  async (c) => ok(c, await service.sellerAnalytics(c.get('user').id), 200),
 );

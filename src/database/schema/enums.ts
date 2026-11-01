@@ -153,6 +153,8 @@ export const productCategory = pgEnum('product_category', [
   'stationery',
 ]);
 
+export const discountType = pgEnum('discount_type', ['none', 'percentage', 'fixed']);
+
 export const orderStatus = pgEnum('order_status', [
   'placed',
   'confirmed',

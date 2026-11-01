@@ -49,6 +49,7 @@ export const organizationSchema = z
     contactPhone: z.string().nullable().openapi({ example: '+912012345678' }),
     city: z.string().nullable().openapi({ example: 'Pune' }),
     regionCode: z.string().nullable().openapi({ example: 'IN-MH' }),
+    address: z.string().nullable().optional().openapi({ example: 'Plot 42, MIDC, Pune' }),
     memberCount: z.number().int().openapi({ example: 12 }),
     /** Only ever populated for an admin. A rejection note is not for the applicant. */
     reviewNote: z.string().nullable().openapi({ example: null }),
@@ -68,6 +69,7 @@ export const createOrganizationBodySchema = z
     contactPhone: z.string().max(32).optional(),
     city: z.string().max(80).optional(),
     regionCode: z.string().max(10).optional(),
+    address: z.string().max(255).optional(),
     verificationDetails: z.record(z.string(), z.unknown()).optional(),
   })
   .openapi('CreateOrganizationBody');
@@ -252,7 +254,11 @@ export const myOrganizationSchema = z
   .openapi('MyOrganization');
 
 export const lookupQuerySchema = z.object({
-  code: z.string().min(1).max(20).openapi({ param: { name: 'code', in: 'query' }, example: '482910' }),
+  code: z
+    .string()
+    .min(1)
+    .max(20)
+    .openapi({ param: { name: 'code', in: 'query' }, example: '482910' }),
 });
 
 export const lookupResultSchema = z
@@ -283,9 +289,17 @@ export const orgQuestionSchema = z
     id: z.number().int().openapi({ example: 1 }),
     organizationId: z.number().int().openapi({ example: 42 }),
     prompt: z.string().min(1).max(300).openapi({ example: 'What department do you work in?' }),
-    description: z.string().nullable().optional().openapi({ example: 'Used for team impact reports' }),
+    description: z
+      .string()
+      .nullable()
+      .optional()
+      .openapi({ example: 'Used for team impact reports' }),
     type: orgQuestionTypeSchema,
-    options: z.array(z.string()).nullable().optional().openapi({ example: ['Engineering', 'Sales', 'Design'] }),
+    options: z
+      .array(z.string())
+      .nullable()
+      .optional()
+      .openapi({ example: ['Engineering', 'Sales', 'Design'] }),
     required: z.boolean().openapi({ example: true }),
     sortOrder: z.number().int().openapi({ example: 0 }),
     version: z.number().int().openapi({ example: 1 }),
@@ -298,9 +312,16 @@ export const orgQuestionSchema = z
 export const createOrgQuestionBodySchema = z
   .object({
     prompt: z.string().min(1).max(300).openapi({ example: 'What department do you work in?' }),
-    description: z.string().max(500).optional().openapi({ example: 'Used for team impact reports' }),
+    description: z
+      .string()
+      .max(500)
+      .optional()
+      .openapi({ example: 'Used for team impact reports' }),
     type: orgQuestionTypeSchema,
-    options: z.array(z.string().min(1).max(120)).optional().openapi({ example: ['Engineering', 'Sales', 'Design'] }),
+    options: z
+      .array(z.string().min(1).max(120))
+      .optional()
+      .openapi({ example: ['Engineering', 'Sales', 'Design'] }),
     required: z.boolean().default(false).openapi({ example: false }),
   })
   .openapi('CreateOrgQuestionBody');
@@ -317,7 +338,10 @@ export const updateOrgQuestionBodySchema = z
 
 export const reorderOrgQuestionsBodySchema = z
   .object({
-    questionIds: z.array(z.number().int()).min(1).openapi({ example: [3, 1, 2] }),
+    questionIds: z
+      .array(z.number().int())
+      .min(1)
+      .openapi({ example: [3, 1, 2] }),
   })
   .openapi('ReorderOrgQuestionsBody');
 

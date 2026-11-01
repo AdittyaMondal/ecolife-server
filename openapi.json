@@ -2376,12 +2376,24 @@
             "example": 24000,
             "description": "Integer paise. Never a float. 24000 = ₹240.00"
           },
+          "effectivePricePaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
           "imageUrl": {
             "type": [
               "string",
               "null"
             ],
             "example": "https://images.unsplash.com/photo-1592150621744-aca64f48394a?auto=format&fit=crop&w=800&q=80"
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
           },
           "stock": {
             "type": "integer",
@@ -2394,6 +2406,59 @@
             ],
             "example": 21.9,
             "description": "Why the product exists. Shown on the card."
+          },
+          "sellerOrgId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sellerName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "discountType": {
+            "type": "string",
+            "enum": [
+              "none",
+              "percentage",
+              "fixed"
+            ],
+            "default": "none",
+            "example": "percentage"
+          },
+          "discountValue": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+          },
+          "discountStartDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "discountEndDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "allowCoinRedemption": {
+            "type": "boolean",
+            "default": true
+          },
+          "maxCoinRedemptionPercent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "default": 20
+          },
+          "isActive": {
+            "type": "boolean",
+            "default": true
           }
         },
         "required": [
@@ -2671,7 +2736,6 @@
           "name",
           "phone",
           "line1",
-          "line2",
           "city",
           "state",
           "pincode",
@@ -2700,6 +2764,509 @@
           "offeredCoins",
           "addressId",
           "idempotencyKey"
+        ]
+      },
+      "CreateSellerProductBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120,
+            "example": "Eco Bamboo Toothbrush"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 140,
+            "example": "eco-bamboo-toothbrush"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "100% biodegradable handle with charcoal bristles."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "plants",
+              "household",
+              "personal_care",
+              "kitchen",
+              "stationery"
+            ],
+            "example": "plants"
+          },
+          "pricePaise": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 19900,
+            "description": "Base price in paise"
+          },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "example": "https://images.unsplash.com/photo-1592150621744"
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "stock": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "example": 50
+          },
+          "co2SavedKg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "example": 0.5
+          },
+          "discountType": {
+            "type": "string",
+            "enum": [
+              "none",
+              "percentage",
+              "fixed"
+            ],
+            "example": "percentage"
+          },
+          "discountValue": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "discountStartDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2026-11-01T00:00:00.000Z"
+          },
+          "discountEndDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2026-11-30T23:59:59.000Z"
+          },
+          "allowCoinRedemption": {
+            "type": "boolean"
+          },
+          "maxCoinRedemptionPercent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "category",
+          "pricePaise"
+        ]
+      },
+      "UpdateSellerProductBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120,
+            "example": "Eco Bamboo Toothbrush"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 140,
+            "example": "eco-bamboo-toothbrush"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "100% biodegradable handle with charcoal bristles."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "plants",
+              "household",
+              "personal_care",
+              "kitchen",
+              "stationery"
+            ],
+            "example": "plants"
+          },
+          "pricePaise": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 19900,
+            "description": "Base price in paise"
+          },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "example": "https://images.unsplash.com/photo-1592150621744"
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "stock": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "example": 50
+          },
+          "co2SavedKg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "example": 0.5
+          },
+          "discountType": {
+            "type": "string",
+            "enum": [
+              "none",
+              "percentage",
+              "fixed"
+            ],
+            "example": "percentage"
+          },
+          "discountValue": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "discountStartDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2026-11-01T00:00:00.000Z"
+          },
+          "discountEndDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2026-11-30T23:59:59.000Z"
+          },
+          "allowCoinRedemption": {
+            "type": "boolean"
+          },
+          "maxCoinRedemptionPercent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SellerOrder": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 101
+          },
+          "orderNumber": {
+            "type": "string",
+            "example": "ECO-2026-00042"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-01T10:00:00.000Z"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "placed",
+              "confirmed",
+              "shipped",
+              "delivered",
+              "cancelled"
+            ],
+            "example": "placed"
+          },
+          "customer": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "example": 4
+              },
+              "name": {
+                "type": "string",
+                "example": "Priya Sharma"
+              },
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "example": "priya@example.com"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "email"
+            ]
+          },
+          "address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SellerOrderItem"
+            }
+          },
+          "sellerSubtotalPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "sellerCoinsSpent": {
+            "type": "integer",
+            "example": 100
+          },
+          "sellerDiscountPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "sellerTotalPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          }
+        },
+        "required": [
+          "id",
+          "orderNumber",
+          "createdAt",
+          "status",
+          "customer",
+          "address",
+          "items",
+          "sellerSubtotalPaise",
+          "sellerCoinsSpent",
+          "sellerDiscountPaise",
+          "sellerTotalPaise"
+        ]
+      },
+      "SellerOrderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "productId": {
+            "type": "integer",
+            "example": 12
+          },
+          "productName": {
+            "type": "string",
+            "example": "Bamboo Toothbrush"
+          },
+          "unitPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "quantity": {
+            "type": "integer",
+            "example": 2
+          },
+          "totalPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "placed",
+              "confirmed",
+              "shipped",
+              "delivered",
+              "cancelled"
+            ],
+            "example": "placed"
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "productName",
+          "unitPaise",
+          "quantity",
+          "totalPaise",
+          "status"
+        ]
+      },
+      "UpdateSellerOrderStatusBody": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "placed",
+              "confirmed",
+              "shipped",
+              "delivered",
+              "cancelled"
+            ],
+            "example": "placed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "SellerAnalytics": {
+        "type": "object",
+        "properties": {
+          "totalSalesVolumePaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "cashRevenuePaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "coinsRedeemedDiscountPaise": {
+            "type": "integer",
+            "example": 24000,
+            "description": "Integer paise. Never a float. 24000 = ₹240.00"
+          },
+          "totalCoinsRedeemed": {
+            "type": "integer",
+            "example": 1250
+          },
+          "totalOrdersCount": {
+            "type": "integer",
+            "example": 45
+          },
+          "totalUnitsSoldCount": {
+            "type": "integer",
+            "example": 88
+          },
+          "activeProductsCount": {
+            "type": "integer",
+            "example": 12
+          },
+          "topProducts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": "integer",
+                  "example": 12
+                },
+                "productName": {
+                  "type": "string",
+                  "example": "Bamboo Toothbrush"
+                },
+                "unitsSold": {
+                  "type": "integer",
+                  "example": 34
+                },
+                "revenuePaise": {
+                  "type": "integer",
+                  "example": 24000,
+                  "description": "Integer paise. Never a float. 24000 = ₹240.00"
+                }
+              },
+              "required": [
+                "productId",
+                "productName",
+                "unitsSold",
+                "revenuePaise"
+              ]
+            }
+          },
+          "monthlySales": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "month": {
+                  "type": "string",
+                  "example": "2026-10"
+                },
+                "salesPaise": {
+                  "type": "integer",
+                  "example": 24000,
+                  "description": "Integer paise. Never a float. 24000 = ₹240.00"
+                },
+                "cashPaise": {
+                  "type": "integer",
+                  "example": 24000,
+                  "description": "Integer paise. Never a float. 24000 = ₹240.00"
+                },
+                "coinsSpent": {
+                  "type": "integer",
+                  "example": 400
+                },
+                "ordersCount": {
+                  "type": "integer",
+                  "example": 18
+                }
+              },
+              "required": [
+                "month",
+                "salesPaise",
+                "cashPaise",
+                "coinsSpent",
+                "ordersCount"
+              ]
+            }
+          }
+        },
+        "required": [
+          "totalSalesVolumePaise",
+          "cashRevenuePaise",
+          "coinsRedeemedDiscountPaise",
+          "totalCoinsRedeemed",
+          "totalOrdersCount",
+          "totalUnitsSoldCount",
+          "activeProductsCount",
+          "topProducts",
+          "monthlySales"
         ]
       },
       "AddressBody": {
@@ -2745,7 +3312,6 @@
           "name",
           "phone",
           "line1",
-          "line2",
           "city",
           "state",
           "pincode",
@@ -3368,6 +3934,13 @@
             ],
             "example": "IN-MH"
           },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "Plot 42, MIDC, Pune"
+          },
           "memberCount": {
             "type": "integer",
             "example": 12
@@ -3463,6 +4036,10 @@
             "type": "string",
             "maxLength": 10
           },
+          "address": {
+            "type": "string",
+            "maxLength": 255
+          },
           "verificationDetails": {
             "type": "object",
             "additionalProperties": {}
@@ -3541,6 +4118,10 @@
           "regionCode": {
             "type": "string",
             "maxLength": 10
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 255
           },
           "verificationDetails": {
             "type": "object",
@@ -7976,6 +8557,810 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/seller/products": {
+      "get": {
+        "tags": [
+          "seller"
+        ],
+        "summary": "List own products",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "plants",
+                "household",
+                "personal_care",
+                "kitchen",
+                "stationery"
+              ],
+              "example": "plants"
+            },
+            "required": false,
+            "name": "category",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "active",
+                "inactive"
+              ],
+              "default": "all"
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seller products",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Product"
+                          }
+                        },
+                        "pageInfo": {
+                          "$ref": "#/components/schemas/PageInfo"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "pageInfo"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "seller"
+        ],
+        "summary": "Create a product",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSellerProductBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Product created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Product"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/seller/products/{id}": {
+      "get": {
+        "tags": [
+          "seller"
+        ],
+        "summary": "Get seller product detail",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Product"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "seller"
+        ],
+        "summary": "Update seller product",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSellerProductBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Product updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Product"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "seller"
+        ],
+        "summary": "Delete or deactivate product",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "deleted": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      },
+                      "required": [
+                        "deleted"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/seller/orders": {
+      "get": {
+        "tags": [
+          "seller"
+        ],
+        "summary": "List orders containing seller items",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "placed",
+                "confirmed",
+                "shipped",
+                "delivered",
+                "cancelled"
+              ],
+              "example": "placed"
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "required": false,
+            "name": "onlyRedemptions",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seller orders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/SellerOrder"
+                          }
+                        },
+                        "pageInfo": {
+                          "$ref": "#/components/schemas/PageInfo"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "pageInfo"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/seller/orders/{id}/status": {
+      "patch": {
+        "tags": [
+          "seller"
+        ],
+        "summary": "Update fulfillment status of an order",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSellerOrderStatusBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "placed",
+                            "confirmed",
+                            "shipped",
+                            "delivered",
+                            "cancelled"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "success",
+                        "status"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/seller/analytics": {
+      "get": {
+        "tags": [
+          "seller"
+        ],
+        "summary": "Seller sales and earnings reports",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seller analytics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SellerAnalytics"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
             "content": {
               "application/json": {
                 "schema": {

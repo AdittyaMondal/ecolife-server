@@ -12,6 +12,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { addresses } from './addresses.ts';
 import { orderStatus } from './enums.ts';
+import { organizations } from './organizations.ts';
 import { products } from './products.ts';
 import { users } from './users.ts';
 
@@ -75,12 +76,17 @@ export const orderItems = pgTable(
     productId: bigint('product_id', { mode: 'number' })
       .notNull()
       .references(() => products.id, { onDelete: 'restrict' }),
+    sellerOrgId: bigint('seller_org_id', { mode: 'number' }).references(() => organizations.id, {
+      onDelete: 'set null',
+    }),
     productName: text('product_name').notNull(),
     unitPaise: integer('unit_paise').notNull(),
     quantity: integer('quantity').notNull(),
+    status: orderStatus('status').notNull().default('placed'),
   },
   (t) => [
     index('order_items_order_idx').on(t.orderId),
+    index('order_items_seller_idx').on(t.sellerOrgId, t.status),
     check('order_items_qty_positive', sql`${t.quantity} > 0`),
   ],
 );

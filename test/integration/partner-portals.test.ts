@@ -29,7 +29,9 @@ describe('Partner Types Registration & Portals (Part 1)', () => {
   it(
     'supports registering Corporate, Community, and Marketplace partners with verification details',
     async () => {
-      const user = await createOnboardedUser({ email: `test-partner-${crypto.randomUUID().slice(0, 6)}@example.test` });
+      const user = await createOnboardedUser({
+        email: `test-partner-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
 
       const res = await json(
         await call('/organizations', {
@@ -77,7 +79,9 @@ describe('Partner Types Registration & Portals (Part 1)', () => {
   it(
     'supports Marketplace Partner (seller) registration with store details',
     async () => {
-      const sellerUser = await createOnboardedUser({ email: `seller-partner-${crypto.randomUUID().slice(0, 6)}@example.test` });
+      const sellerUser = await createOnboardedUser({
+        email: `seller-partner-${crypto.randomUUID().slice(0, 6)}@example.test`,
+      });
 
       const res = await json(
         await call('/organizations', {

@@ -239,10 +239,7 @@ eventRoutes.openapi(
     },
   }),
   async (c) => {
-    const csv = await service.exportParticipantsCsv(
-      c.get('user').id,
-      c.req.valid('param').id,
-    );
+    const csv = await service.exportParticipantsCsv(c.get('user').id, c.req.valid('param').id);
     return c.body(csv, 200, {
       'Content-Type': 'text/csv; charset=UTF-8',
       'Content-Disposition': `attachment; filename="event-${c.req.valid('param').id}-participants.csv"`,

@@ -1,14 +1,22 @@
 import type { Executor } from '@common/rewards/rewards.ts';
 import { db } from '@database/client.ts';
-import { addresses, cartItems, orderItems, orders, products } from '@database/schema/index.ts';
-import { and, asc, desc, eq, ilike, inArray, lt, or, sql } from 'drizzle-orm';
+import {
+  addresses,
+  cartItems,
+  orderItems,
+  orders,
+  organizations,
+  products,
+  users,
+} from '@database/schema/index.ts';
+import { and, asc, desc, eq, gte, ilike, inArray, lt, lte, or, sql } from 'drizzle-orm';
 
 /** Every Drizzle query for the marketplace and address modules. */
 
 export type ProductRow = typeof products.$inferSelect;
 export type AddressRow = typeof addresses.$inferSelect;
 
-const PRODUCT_COLUMNS = {
+export const PRODUCT_COLUMNS = {
   id: products.id,
   slug: products.slug,
   name: products.name,
@@ -16,8 +24,18 @@ const PRODUCT_COLUMNS = {
   category: products.category,
   pricePaise: products.pricePaise,
   imageUrl: products.imageUrl,
+  images: products.images,
   stock: products.stock,
   co2SavedKg: products.co2SavedKg,
+  discountType: products.discountType,
+  discountValue: products.discountValue,
+  discountStartDate: products.discountStartDate,
+  discountEndDate: products.discountEndDate,
+  allowCoinRedemption: products.allowCoinRedemption,
+  maxCoinRedemptionPercent: products.maxCoinRedemptionPercent,
+  sellerOrgId: products.sellerOrgId,
+  isActive: products.isActive,
+  createdAt: products.createdAt,
 } as const;
 
 export type Sort = 'newest' | 'price_asc' | 'price_desc' | 'co2_desc';
@@ -283,4 +301,345 @@ export async function nextOrderNumber(tx: Executor) {
     .from(orders)
     .where(sql`${orders.orderNumber} like ${`ECO-${year}-%`}`);
   return `ECO-${year}-${String((row?.n ?? 0) + 1).padStart(5, '0')}`;
+}
+
+// --- Seller Portal Repository Methods (Part 6) ------------------------------
+
+export async function listSellerProducts(opts: {
+  sellerOrgId: number;
+  category?: string;
+  status: 'all' | 'active' | 'inactive';
+  q?: string;
+  afterId: number | null;
+  limit: number;
+}) {
+  const pattern = opts.q ? `%${opts.q.replace(/[\\%_]/g, '\\$&')}%` : null;
+
+  return db
+    .select(PRODUCT_COLUMNS)
+    .from(products)
+    .where(
+      and(
+        eq(products.sellerOrgId, opts.sellerOrgId),
+        opts.status === 'active'
+          ? eq(products.isActive, true)
+          : opts.status === 'inactive'
+            ? eq(products.isActive, false)
+            : undefined,
+        opts.category ? eq(products.category, opts.category as ProductRow['category']) : undefined,
+        pattern
+          ? or(ilike(products.name, pattern), ilike(products.description, pattern))
+          : undefined,
+        opts.afterId !== null ? lt(products.id, opts.afterId) : undefined,
+      ),
+    )
+    .orderBy(desc(products.id))
+    .limit(opts.limit + 1);
+}
+
+export async function insertProduct(values: typeof products.$inferInsert, tx: Executor = db) {
+  const [row] = await tx.insert(products).values(values).returning();
+  if (!row) throw new Error('Product insert returned nothing');
+  return row;
+}
+
+export async function findSellerProduct(sellerOrgId: number, id: number, tx: Executor = db) {
+  const [row] = await tx
+    .select(PRODUCT_COLUMNS)
+    .from(products)
+    .where(and(eq(products.id, id), eq(products.sellerOrgId, sellerOrgId)));
+  return row ?? null;
+}
+
+export async function updateSellerProduct(
+  sellerOrgId: number,
+  id: number,
+  values: Partial<typeof products.$inferInsert>,
+  tx: Executor = db,
+) {
+  const [row] = await tx
+    .update(products)
+    .set(values)
+    .where(and(eq(products.id, id), eq(products.sellerOrgId, sellerOrgId)))
+    .returning();
+  return row ?? null;
+}
+
+export async function deleteSellerProduct(sellerOrgId: number, id: number, tx: Executor = db) {
+  // Check if product was ever ordered
+  const [ordered] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(orderItems)
+    .where(eq(orderItems.productId, id));
+
+  if ((ordered?.count ?? 0) > 0) {
+    // Soft-deactivate to maintain financial integrity
+    const [row] = await tx
+      .update(products)
+      .set({ isActive: false })
+      .where(and(eq(products.id, id), eq(products.sellerOrgId, sellerOrgId)))
+      .returning();
+    return row ?? null;
+  }
+
+  const [deleted] = await tx
+    .delete(products)
+    .where(and(eq(products.id, id), eq(products.sellerOrgId, sellerOrgId)))
+    .returning();
+  return deleted ?? null;
+}
+
+export async function listSellerOrders(opts: {
+  sellerOrgId: number;
+  status?: string;
+  onlyRedemptions?: boolean;
+  afterId: number | null;
+  limit: number;
+}) {
+  // Find distinct order IDs containing items from this seller
+  const matchingOrderIdsQuery = db
+    .selectDistinct({ orderId: orderItems.orderId })
+    .from(orderItems)
+    .innerJoin(orders, eq(orders.id, orderItems.orderId))
+    .where(
+      and(
+        eq(orderItems.sellerOrgId, opts.sellerOrgId),
+        opts.status
+          ? eq(
+              orderItems.status,
+              opts.status as 'placed' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled',
+            )
+          : undefined,
+        opts.onlyRedemptions ? sql`${orders.coinsSpent} > 0` : undefined,
+        opts.afterId !== null ? lt(orders.id, opts.afterId) : undefined,
+      ),
+    )
+    .orderBy(desc(orderItems.orderId))
+    .limit(opts.limit + 1);
+
+  const matched = await matchingOrderIdsQuery;
+  const orderIds = matched.map((m) => m.orderId);
+  if (orderIds.length === 0) return [];
+
+  const [orderRows, itemRows, addressRows] = await Promise.all([
+    db
+      .select({
+        id: orders.id,
+        orderNumber: orders.orderNumber,
+        status: orders.status,
+        subtotalPaise: orders.subtotalPaise,
+        discountPaise: orders.discountPaise,
+        totalPaise: orders.totalPaise,
+        coinsSpent: orders.coinsSpent,
+        addressId: orders.addressId,
+        createdAt: orders.createdAt,
+        userId: orders.userId,
+        userName: users.name,
+        userEmail: users.email,
+      })
+      .from(orders)
+      .innerJoin(users, eq(users.id, orders.userId))
+      .where(inArray(orders.id, orderIds))
+      .orderBy(desc(orders.id)),
+    db
+      .select({
+        id: orderItems.id,
+        orderId: orderItems.orderId,
+        productId: orderItems.productId,
+        productName: orderItems.productName,
+        unitPaise: orderItems.unitPaise,
+        quantity: orderItems.quantity,
+        status: orderItems.status,
+        sellerOrgId: orderItems.sellerOrgId,
+      })
+      .from(orderItems)
+      .where(
+        and(inArray(orderItems.orderId, orderIds), eq(orderItems.sellerOrgId, opts.sellerOrgId)),
+      )
+      .orderBy(asc(orderItems.id)),
+    db
+      .select()
+      .from(addresses)
+      .where(
+        inArray(
+          addresses.id,
+          matched.map((_) => 0), // fallback handled below
+        ),
+      ),
+  ]);
+
+  const uniqueAddressIds = Array.from(
+    new Set(orderRows.map((o) => o.addressId).filter((id): id is number => id !== null)),
+  );
+  const actualAddresses =
+    uniqueAddressIds.length > 0
+      ? await db.select().from(addresses).where(inArray(addresses.id, uniqueAddressIds))
+      : [];
+  const addressMap = new Map(actualAddresses.map((a) => [a.id, a]));
+
+  const itemsByOrder = new Map<number, typeof itemRows>();
+  for (const item of itemRows) {
+    const list = itemsByOrder.get(item.orderId) ?? [];
+    list.push(item);
+    itemsByOrder.set(item.orderId, list);
+  }
+
+  return orderRows.map((ord) => {
+    const items = itemsByOrder.get(ord.id) ?? [];
+    const sellerSubtotalPaise = items.reduce((sum, it) => sum + it.unitPaise * it.quantity, 0);
+
+    // Apportion coins spent and discount proportional to seller items in order
+    const sellerRatio = ord.subtotalPaise > 0 ? sellerSubtotalPaise / ord.subtotalPaise : 1;
+    const sellerCoinsSpent = Math.round(ord.coinsSpent * sellerRatio);
+    const sellerDiscountPaise = Math.round(ord.discountPaise * sellerRatio);
+    const sellerTotalPaise = sellerSubtotalPaise - sellerDiscountPaise;
+
+    return {
+      id: ord.id,
+      orderNumber: ord.orderNumber,
+      createdAt: ord.createdAt.toISOString(),
+      status: ord.status,
+      customer: {
+        id: ord.userId,
+        name: ord.userName,
+        email: ord.userEmail,
+      },
+      address: ord.addressId ? (addressMap.get(ord.addressId) ?? null) : null,
+      items: items.map((i) => ({
+        id: i.id,
+        productId: i.productId,
+        productName: i.productName,
+        unitPaise: i.unitPaise,
+        quantity: i.quantity,
+        totalPaise: i.unitPaise * i.quantity,
+        status: i.status,
+      })),
+      sellerSubtotalPaise,
+      sellerCoinsSpent,
+      sellerDiscountPaise,
+      sellerTotalPaise,
+    };
+  });
+}
+
+export async function updateSellerOrderStatus(
+  sellerOrgId: number,
+  orderId: number,
+  status: 'placed' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled',
+  tx: Executor = db,
+) {
+  // Update order items for this seller
+  const updatedItems = await tx
+    .update(orderItems)
+    .set({ status })
+    .where(and(eq(orderItems.orderId, orderId), eq(orderItems.sellerOrgId, sellerOrgId)))
+    .returning();
+
+  if (updatedItems.length === 0) return null;
+
+  // Also sync overall order status if appropriate
+  await tx.update(orders).set({ status }).where(eq(orders.id, orderId));
+
+  return updatedItems;
+}
+
+export async function getSellerAnalytics(sellerOrgId: number) {
+  // Get all order items for this seller
+  const items = await db
+    .select({
+      productId: orderItems.productId,
+      productName: orderItems.productName,
+      unitPaise: orderItems.unitPaise,
+      quantity: orderItems.quantity,
+      orderId: orderItems.orderId,
+      createdAt: orders.createdAt,
+      orderSubtotal: orders.subtotalPaise,
+      orderDiscount: orders.discountPaise,
+      orderCoinsSpent: orders.coinsSpent,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orders.id, orderItems.orderId))
+    .where(and(eq(orderItems.sellerOrgId, sellerOrgId), sql`${orders.status} != 'cancelled'`));
+
+  const [activeProducts] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(products)
+    .where(and(eq(products.sellerOrgId, sellerOrgId), eq(products.isActive, true)));
+
+  let totalSalesVolumePaise = 0;
+  let cashRevenuePaise = 0;
+  let coinsRedeemedDiscountPaise = 0;
+  let totalCoinsRedeemed = 0;
+  let totalUnitsSoldCount = 0;
+  const distinctOrders = new Set<number>();
+
+  const productStats = new Map<number, { name: string; units: number; revenue: number }>();
+  const monthlyStats = new Map<
+    string,
+    { sales: number; cash: number; coins: number; orders: Set<number> }
+  >();
+
+  for (const it of items) {
+    const itemTotal = it.unitPaise * it.quantity;
+    totalSalesVolumePaise += itemTotal;
+    totalUnitsSoldCount += it.quantity;
+    distinctOrders.add(it.orderId);
+
+    const ratio = it.orderSubtotal > 0 ? itemTotal / it.orderSubtotal : 1;
+    const itemDiscount = Math.round(it.orderDiscount * ratio);
+    const itemCoins = Math.round(it.orderCoinsSpent * ratio);
+    const itemCash = itemTotal - itemDiscount;
+
+    coinsRedeemedDiscountPaise += itemDiscount;
+    totalCoinsRedeemed += itemCoins;
+    cashRevenuePaise += itemCash;
+
+    // Product breakdown
+    const currP = productStats.get(it.productId) ?? { name: it.productName, units: 0, revenue: 0 };
+    currP.units += it.quantity;
+    currP.revenue += itemTotal;
+    productStats.set(it.productId, currP);
+
+    // Monthly breakdown
+    const month = it.createdAt.toISOString().slice(0, 7); // YYYY-MM
+    const currM = monthlyStats.get(month) ?? { sales: 0, cash: 0, coins: 0, orders: new Set() };
+    currM.sales += itemTotal;
+    currM.cash += itemCash;
+    currM.coins += itemCoins;
+    currM.orders.add(it.orderId);
+    monthlyStats.set(month, currM);
+  }
+
+  const topProducts = Array.from(productStats.entries())
+    .map(([productId, stats]) => ({
+      productId,
+      productName: stats.name,
+      unitsSold: stats.units,
+      revenuePaise: stats.revenue,
+    }))
+    .sort((a, b) => b.unitsSold - a.unitsSold)
+    .slice(0, 5);
+
+  const monthlySales = Array.from(monthlyStats.entries())
+    .map(([month, stats]) => ({
+      month,
+      salesPaise: stats.sales,
+      cashPaise: stats.cash,
+      coinsSpent: stats.coins,
+      ordersCount: stats.orders.size,
+    }))
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .slice(-6);
+
+  return {
+    totalSalesVolumePaise,
+    cashRevenuePaise,
+    coinsRedeemedDiscountPaise,
+    totalCoinsRedeemed,
+    totalOrdersCount: distinctOrders.size,
+    totalUnitsSoldCount,
+    activeProductsCount: activeProducts?.count ?? 0,
+    topProducts,
+    monthlySales,
+  };
 }

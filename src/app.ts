@@ -9,7 +9,11 @@ import { goalRoutes } from '@modules/goals/goals.routes.ts';
 import { healthRoutes } from '@modules/health/health.routes.ts';
 import { homeRoutes } from '@modules/home/home.routes.ts';
 import { leaderboardRoutes } from '@modules/leaderboard/leaderboard.routes.ts';
-import { addressRoutes, marketplaceRoutes } from '@modules/marketplace/marketplace.routes.ts';
+import {
+  addressRoutes,
+  marketplaceRoutes,
+  sellerRoutes,
+} from '@modules/marketplace/marketplace.routes.ts';
 import {
   adminOrganizationRoutes,
   organizationRoutes,
@@ -58,6 +62,7 @@ app.route('/api/v1/goals', goalRoutes);
 app.route('/api/v1/trees', treeRoutes);
 app.route('/api/v1/leaderboard', leaderboardRoutes);
 app.route('/api/v1/marketplace', marketplaceRoutes);
+app.route('/api/v1/seller', sellerRoutes);
 app.route('/api/v1/addresses', addressRoutes);
 app.route('/api/v1/events', eventRoutes);
 app.route('/api/v1/organizations', organizationRoutes);
