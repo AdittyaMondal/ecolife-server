@@ -174,6 +174,82 @@ export async function login(email: string, password: string, meta: Meta) {
   return sessionPayload(user.id, meta);
 }
 
+/**
+ * Sign in with a Google access token, creating the account when the email is new.
+ *
+ * The token is checked with Google. A client-supplied email would let anyone
+ * claim an account, so the address comes only from Google's response, and only
+ * when Google says that address is verified and the token was issued to an
+ * EcoLife OAuth client.
+ *
+ * `password_hash` is not nullable. Google-only accounts get a random hash the
+ * user never sees; they can still set a password later through the reset flow.
+ */
+export async function signInWithGoogle(accessToken: string, timezone: string, meta: Meta) {
+  const profile = await googleProfile(accessToken);
+  const email = profile.email.toLowerCase();
+  let user = await repo.findUserByEmail(email);
+
+  if (!user) {
+    const created = await repo.createUser({
+      name: profile.name,
+      email,
+      passwordHash: await hashPassword(crypto.randomUUID() + crypto.randomUUID()),
+      timezone,
+      emailVerifiedAt: new Date(),
+      avatarUrl: profile.avatarUrl,
+    });
+    if (!created) throw new DomainError('INTERNAL_001', 'Could not create the account.', 500);
+    user = created;
+  } else if (!user.emailVerifiedAt) {
+    await repo.markEmailVerified(user.id);
+    user = (await repo.findUserById(user.id)) ?? user;
+  }
+
+  return sessionPayload(user.id, meta);
+}
+
+type GoogleProfile = { email: string; name: string; avatarUrl?: string };
+
+async function googleProfile(accessToken: string): Promise<GoogleProfile> {
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  let tokenInfo: Record<string, unknown>;
+  let userInfo: Record<string, unknown>;
+  try {
+    const [tokenResponse, userResponse] = await Promise.all([
+      fetch('https://oauth2.googleapis.com/tokeninfo', { headers }),
+      fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers }),
+    ]);
+    if (!tokenResponse.ok || !userResponse.ok) {
+      throw new DomainError('AUTH_001', 'Google sign-in was not accepted.', 401);
+    }
+    tokenInfo = (await tokenResponse.json()) as Record<string, unknown>;
+    userInfo = (await userResponse.json()) as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof DomainError) throw error;
+    throw new DomainError('AUTH_001', 'Google sign-in could not be checked.', 401);
+  }
+
+  const audience = [tokenInfo.aud, tokenInfo.azp, tokenInfo.audience, tokenInfo.issued_to].filter(
+    (value): value is string => typeof value === 'string' && value.length > 0,
+  );
+  if (!audience.some((id) => env.GOOGLE_OAUTH_CLIENT_IDS.includes(id))) {
+    throw new DomainError('AUTH_001', 'Google sign-in was not accepted.', 401);
+  }
+
+  const email = typeof userInfo.email === 'string' ? userInfo.email.trim().toLowerCase() : '';
+  const verified = userInfo.email_verified === true || userInfo.email_verified === 'true';
+  if (!email.includes('@') || !verified) {
+    throw new DomainError('AUTH_001', 'Google did not confirm this email address.', 401);
+  }
+
+  const given = typeof userInfo.name === 'string' ? userInfo.name.trim().replace(/\s+/g, ' ') : '';
+  const name = (given || email.split('@')[0] || 'EcoLife member').slice(0, 80);
+  const picture = typeof userInfo.picture === 'string' ? userInfo.picture : '';
+  const avatarUrl = picture.startsWith('https://') && picture.length <= 500 ? picture : undefined;
+  return { email, name, avatarUrl };
+}
+
 export async function refresh(presented: string, meta: Meta) {
   const result = await rotateSession(presented, meta);
   if (!result.ok) {

@@ -38,6 +38,7 @@ export async function createUser(input: {
   phone?: string;
   timezone: string;
   emailVerifiedAt?: Date;
+  avatarUrl?: string;
 }) {
   const [row] = await db
     .insert(users)

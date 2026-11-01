@@ -376,6 +376,26 @@
           "password"
         ]
       },
+      "GoogleBody": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 8192
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "default": "Asia/Kolkata",
+            "example": "Asia/Kolkata"
+          }
+        },
+        "required": [
+          "accessToken"
+        ]
+      },
       "RefreshBody": {
         "type": "object",
         "properties": {
@@ -6054,6 +6074,94 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LoginBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuthResult"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited — see Retry-After",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sign in or create an account with Google",
+        "description": "Accepts a Google access token from the mobile Sign-In SDK. The token is checked with Google, and it must have been issued to an EcoLife OAuth client. A matching email signs into the existing account; otherwise a verified account is created. Send `x-ecolife-platform: ios|android` to get `session.refreshToken` in the body.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ios",
+                "android",
+                "web"
+              ],
+              "example": "android",
+              "description": "Send ios or android to receive session.refreshToken in the response body. Omitted or web: the token is set as an httpOnly cookie and the body field is null."
+            },
+            "required": false,
+            "description": "Send ios or android to receive session.refreshToken in the response body. Omitted or web: the token is set as an httpOnly cookie and the body field is null.",
+            "name": "x-ecolife-platform",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleBody"
               }
             }
           }

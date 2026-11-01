@@ -49,6 +49,19 @@ export const loginBodySchema = z
   .object({ email: emailSchema, password: z.string().min(1).max(200) })
   .openapi('LoginBody');
 
+/** A Google access token from the mobile Sign-In SDK. The server checks it with Google. */
+export const googleBodySchema = z
+  .object({
+    accessToken: z.string().min(20).max(8192),
+    timezone: z
+      .string()
+      .min(1)
+      .max(64)
+      .default('Asia/Kolkata')
+      .openapi({ example: 'Asia/Kolkata' }),
+  })
+  .openapi('GoogleBody');
+
 /**
  * The refresh token is returned in the body for the mobile client, which stores
  * it in expo-secure-store, AND set as an httpOnly cookie for the web client.

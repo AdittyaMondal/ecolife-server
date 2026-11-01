@@ -127,6 +127,23 @@ const envSchema = z.object({
   EXPO_ACCESS_TOKEN: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+
+  /**
+   * Google OAuth client IDs allowed to sign a user in.
+   *
+   * An access token is only accepted when Google says it was issued to one of
+   * these clients. Comma-separated. The default is the EcoLife Android client;
+   * add a Web client here when the website grows a Google button.
+   */
+  GOOGLE_OAUTH_CLIENT_IDS: z
+    .string()
+    .default('789459681263-sovuuv1llrmccfijf2otrmorsdea2q3c.apps.googleusercontent.com')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
 });
 
 function loadEnv() {

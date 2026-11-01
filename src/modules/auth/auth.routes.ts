@@ -21,6 +21,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import {
   authResultSchema,
   forgotPasswordBodySchema,
+  googleBodySchema,
   loginBodySchema,
   meSchema,
   okMessageSchema,
@@ -164,6 +165,43 @@ authRoutes.openapi(
       await consumeFailedAttempt(c, body.email, BUCKETS.authStrict);
       throw err;
     }
+    return ok(
+      c,
+      {
+        session: {
+          accessToken: r.accessToken,
+          accessTokenExpiresIn: r.expiresIn,
+          refreshToken: deliverRefresh(c, r.refreshToken),
+        },
+        user: service.publicUser(r.user, r.membership, await service.profileState(r.user.id)),
+      },
+      200,
+    );
+  },
+);
+
+authRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/google',
+    tags: ['auth'],
+    summary: 'Sign in or create an account with Google',
+    description:
+      'Accepts a Google access token from the mobile Sign-In SDK. The token is checked ' +
+      'with Google, and it must have been issued to an EcoLife OAuth client. A matching ' +
+      'email signs into the existing account; otherwise a verified account is created. ' +
+      'Send `x-ecolife-platform: ios|android` to get `session.refreshToken` in the body.',
+    request: { ...body(googleBodySchema), headers: platformHeader },
+    responses: {
+      200: jsonOk(authResultSchema, 'Signed in'),
+      401: errorResponses[401],
+      429: errorResponses[429],
+    },
+  }),
+  async (c) => {
+    const input = c.req.valid('json');
+    await consumeForIp(c, BUCKETS.authStrict);
+    const r = await service.signInWithGoogle(input.accessToken, input.timezone, metaOf(c));
     return ok(
       c,
       {

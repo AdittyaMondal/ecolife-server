@@ -4,13 +4,13 @@
 > Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
 > fails CI when this file is stale.
 
-**Version** 0.1.0 · **Base path** `/api/v1` · **92 paths** · **115 operations** · **131 schemas**
+**Version** 0.1.0 · **Base path** `/api/v1` · **93 paths** · **116 operations** · **132 schemas**
 
 ---
 
 ## Before you read this
 
-**Every endpoint below is implemented.** All 115 operations run against the real
+**Every endpoint below is implemented.** All 116 operations run against the real
 database; none returns `GEN_501` any more. Point your client at the server, not
 at the mock — the mock serves the *examples* in this document, so it will happily
 return a plausible shape for a request the real server would reject.
@@ -61,7 +61,7 @@ an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` acce
 ## Contents
 
 - [health](#health) — 2 operations
-- [auth](#auth) — 9 operations
+- [auth](#auth) — 10 operations
 - [profile](#profile) — 9 operations
 - [home](#home) — 1 operation
 - [track](#track) — 4 operations
@@ -121,6 +121,7 @@ an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` acce
 | | Endpoint | Summary |
 |---|---|---|
 | `POST` | [`/api/v1/auth/forgot-password`](#post-api-v1-auth-forgot-password)  | Request a password reset link |
+| `POST` | [`/api/v1/auth/google`](#post-api-v1-auth-google)  | Sign in or create an account with Google |
 | `POST` | [`/api/v1/auth/login`](#post-api-v1-auth-login)  | Exchange credentials for a session |
 | `POST` | [`/api/v1/auth/logout`](#post-api-v1-auth-logout) 🔒 | Revoke the current session family |
 | `GET` | [`/api/v1/auth/me`](#get-api-v1-auth-me) 🔒 | Current user, onboarding state and wallet |
@@ -149,6 +150,35 @@ Always 200, whether or not the address exists — it must not leak registration.
 | Code | Meaning | `data` |
 |---|---|---|
 | `200` | Accepted | [`OkMessage`](#okmessage) |
+| `429` | Rate limited — see Retry-After | null |
+
+### `POST` `/api/v1/auth/google`
+
+**Sign in or create an account with Google**
+
+🔓 No authentication.
+
+Accepts a Google access token from the mobile Sign-In SDK. The token is checked with Google, and it must have been issued to an EcoLife OAuth client. A matching email signs into the existing account; otherwise a verified account is created. Send `x-ecolife-platform: ios|android` to get `session.refreshToken` in the body.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `x-ecolife-platform` | header | no | `ios` \| `android` \| `web` | e.g. `"android"` |
+
+**Request body** (required) — [`GoogleBody`](#googlebody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `accessToken` | string | yes |  |
+| `timezone` | string | no | e.g. `"Asia/Kolkata"`. default `"Asia/Kolkata"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Signed in | [`AuthResult`](#authresult) |
+| `401` | Not authenticated | null |
 | `429` | Rate limited — see Retry-After | null |
 
 ### `POST` `/api/v1/auth/login`
@@ -2904,7 +2934,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 
 ## Schemas
 
-131 named components.
+132 named components.
 
 ### ActiveGoalSummary
 
@@ -3275,6 +3305,13 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `active` | [`Goal`](#goal) \| null | yes |  |
 | `past` | [`Goal`](#goal)[] | yes |  |
+
+### GoogleBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `accessToken` | string | yes |  |
+| `timezone` | string | no | e.g. `"Asia/Kolkata"`. default `"Asia/Kolkata"` |
 
 ### GrowthStage
 
