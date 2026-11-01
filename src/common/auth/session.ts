@@ -58,8 +58,38 @@ export type RotateResult =
  *
  * This is refresh-token rotation with a reuse interval, the same shape Auth0
  * and IdentityServer use.
+ *
+ * It applies to `platform === 'web'` ONLY. The race is a property of browsers:
+ * one cookie, many tabs, each its own JS context. A mobile client keeps its
+ * token in expo-secure-store with a single app instance and no tabs, so a
+ * duplicate there has no benign explanation and still burns the family. The
+ * window is granted where the bug exists and nowhere else.
  */
 const RACE_GRACE_MS = 10_000;
+
+/** Only browsers share one refresh token between concurrent contexts. */
+function mayRace(platform: string): boolean {
+  return platform === 'web';
+}
+
+/**
+ * A race the grace window forgave.
+ *
+ * Logged because this is the one case the window cannot tell apart from an
+ * attacker replaying a stolen token within ten seconds of the victim. A
+ * trickle is two tabs; a spike on one user is worth a look.
+ */
+function logRace(where: string, row: { userId: number; familyId: string; platform: string }): void {
+  console.warn(
+    JSON.stringify({
+      event: 'refresh_raced',
+      at: where,
+      userId: row.userId,
+      familyId: row.familyId,
+      platform: row.platform,
+    }),
+  );
+}
 
 export async function rotateSession(
   presented: string,
@@ -80,10 +110,12 @@ export async function rotateSession(
    * or not it has also aged out.
    */
   if (row.revokedAt) {
-    // Inside the grace window this is the same browser racing itself, not a
-    // replay. Refuse this ONE call and leave the family alone; the caller
-    // retries and picks up the cookie the winner just set.
-    if (Date.now() - row.revokedAt.getTime() <= RACE_GRACE_MS) {
+    // Inside the grace window, on a platform that can actually race, this is
+    // the same browser racing itself rather than a replay. Refuse this ONE
+    // call and leave the family alone; the caller retries and picks up the
+    // cookie the winner just set.
+    if (mayRace(row.platform) && Date.now() - row.revokedAt.getTime() <= RACE_GRACE_MS) {
+      logRace('revoked-read', row);
       return { ok: false, reason: 'raced' };
     }
     await db
@@ -118,12 +150,27 @@ export async function rotateSession(
 
   if (claimed.length === 0) {
     /**
-     * Lost the atomic claim. This is ALWAYS a race, never a stale replay: a
-     * token spent earlier would have had `revoked_at` set in the SELECT above
-     * and been handled there. To get here, another request claimed the row
-     * between our read and our write — microseconds, and by definition inside
-     * the grace window. So refuse this call and leave the family alone.
+     * Lost the atomic claim: another request claimed the row between our read
+     * and our write. That is microseconds, so it is a race rather than a stale
+     * replay — a token spent earlier would have had `revoked_at` set in the
+     * SELECT above and been handled there.
+     *
+     * Still gated on the platform, exactly like the revoked-read branch. A
+     * mobile client has no second context to race against, so a lost claim
+     * there means two parties holding one token. Forgetting this guard here
+     * was a real bug: whichever of the two paths a loser happened to take
+     * decided whether the family burned, so the same five concurrent mobile
+     * rotations gave different answers depending on timing.
      */
+    if (!mayRace(row.platform)) {
+      await db
+        .update(sessions)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(sessions.familyId, row.familyId), isNull(sessions.revokedAt)))
+        .execute();
+      return { ok: false, reason: 'reused' };
+    }
+    logRace('lost-claim', row);
     return { ok: false, reason: 'raced' };
   }
 
