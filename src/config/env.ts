@@ -126,6 +126,7 @@ const envSchema = z.object({
   MAIL_FROM: z.string().default('EcoLife <no-reply@ecolife.app>'),
   EXPO_ACCESS_TOKEN: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
 });
 
 function loadEnv() {

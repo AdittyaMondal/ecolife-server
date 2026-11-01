@@ -4,6 +4,7 @@ import { createModule } from '@common/openapi/factory.ts';
 import { env } from '@config/env.ts';
 import { authRoutes } from '@modules/auth/auth.routes.ts';
 import { eventRoutes } from '@modules/events/events.routes.ts';
+import { gardenRoutes } from '@modules/garden/garden.routes.ts';
 import { treeRoutes } from '@modules/gamification/gamification.routes.ts';
 import { goalRoutes } from '@modules/goals/goals.routes.ts';
 import { healthRoutes } from '@modules/health/health.routes.ts';
@@ -29,6 +30,7 @@ import {
   referenceRoutes,
   uploadRoutes,
 } from '@modules/reference/reference.routes.ts';
+import { aiRoutes } from '@modules/ai/ai.routes.ts';
 import { trackRoutes } from '@modules/track/track.routes.ts';
 import { getCookie, setCookie } from 'hono/cookie';
 import { cors } from 'hono/cors';
@@ -63,6 +65,7 @@ app.route('/api/v1/users', publicUserRoutes);
 app.route('/api/v1/home', homeRoutes);
 app.route('/api/v1/track', trackRoutes);
 app.route('/api/v1/goals', goalRoutes);
+app.route('/api/v1/garden', gardenRoutes);
 app.route('/api/v1/trees', treeRoutes);
 app.route('/api/v1/leaderboard', leaderboardRoutes);
 app.route('/api/v1/marketplace', marketplaceRoutes);
@@ -76,6 +79,7 @@ app.route('/api/v1/admin/revenue', adminRevenueRoutes);
 app.route('/api/v1/notifications', notificationRoutes);
 app.route('/api/v1/uploads', uploadRoutes);
 app.route('/api/v1/carbon', carbonRoutes);
+app.route('/api/v1/ai', aiRoutes);
 app.route('/api/v1', referenceRoutes);
 
 /**
