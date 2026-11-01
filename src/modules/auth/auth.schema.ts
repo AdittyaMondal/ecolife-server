@@ -13,7 +13,7 @@ export const emailSchema = z.string().email().max(254).openapi({ example: 'yusuf
  */
 export const passwordSchema = z
   .string()
-  .min(10)
+  .min(6)
   .max(200)
   .openapi({ example: 'correct horse battery' });
 
@@ -38,7 +38,7 @@ export const registerBodySchema = z
   .openapi('RegisterBody');
 
 export const loginBodySchema = z
-  .object({ email: emailSchema, password: passwordSchema })
+  .object({ email: emailSchema, password: z.string().min(1).max(200) })
   .openapi('LoginBody');
 
 /**
