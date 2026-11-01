@@ -16,9 +16,12 @@ into the client repos' copy of this file.
 | Code | HTTP | Meaning |
 |---|---|---|
 | `GEN_400` | 400 | Request failed schema validation. `details.issues` lists `{ path, message }`. |
+| `GEN_404` | 404 | A resource addressed by id does not exist, or is not the caller's. |
 | `GEN_429` | 429 | Rate limited. See the `Retry-After` header. |
-| `GEN_501` | 501 | Endpoint declared in the contract but not implemented yet. |
+| `GEN_500` | 500 | A server-side invariant could not be satisfied — currently only slug allocation exhausting its attempts. |
+| `GEN_501` | 501 | **Never returned.** No route declares it; kept so the meaning stays reserved. |
 | `HTTP_404` | 404 | No such route. |
+| `DOCS_001` | 404 | `/docs` is disabled, or the token was wrong. A 404 rather than a 401, so the page's existence is not confirmed. |
 | `INTERNAL_001` | 500 | Unexpected. The real error is logged server-side and never returned. |
 | `HEALTH_001` | 503 | Database unreachable. |
 
@@ -29,8 +32,11 @@ into the client repos' copy of this file.
 | `AUTH_001` | 401 | Invalid credentials. Deliberately identical for unknown email and wrong password. |
 | `AUTH_002` | 401 | Access token expired — refresh and retry. |
 | `AUTH_003` | 401 | Refresh token invalid or replayed. The whole token family is revoked. |
-| `AUTH_004` | 403 | Email not verified. Browsing is allowed; **earning is blocked**. |
+| `AUTH_004` | 403 | Email not verified. **Never returned.** Earning is still gated (PRD-v2 §4.4), but the gate SKIPS the award instead of failing the request: an unverified user logs a day normally and gets `reward.pointsDelta: 0`. Refusing the core action over a bonus was the old behaviour and it was wrong. Read `user.emailVerified` to explain the zero. |
 | `AUTH_005` | 409 | Email already registered. |
+| `AUTH_006` | 403 | Admin only. |
+| `AUTH_007` | 422 | Verification or reset link invalid, already used, or expired. |
+| `AUTH_008` | 409 | Already verified — nothing to resend. |
 
 ## Onboarding
 
@@ -44,7 +50,7 @@ into the client repos' copy of this file.
 
 | Code | HTTP | Meaning |
 |---|---|---|
-| `TRACK_001` | 409 | A log already exists for this date. Use `PATCH`. |
+| `TRACK_001` | 409 | A log already exists for this date under a DIFFERENT `clientLogId` — a second device, or a reinstall that lost its offline queue. `PATCH /track/logs/{id}` instead. Replaying the SAME `clientLogId` is not this: it returns the original result with no new reward. |
 | `TRACK_002` | 422 | `logDate` outside the allowed window — today or yesterday in the user's timezone. |
 | `TRACK_003` | 403 | Edit window closed (after 02:00 the following day). |
 
@@ -68,7 +74,7 @@ into the client repos' copy of this file.
 | `EVENT_003` | 422 | Scan outside the check-in window (`start − 1h` to `end + 2h`). |
 | `EVENT_004` | 200 | **Not an error.** Already checked in — returns the prior result, grants nothing. |
 | `EVENT_005` | 422 | Capacity reached. |
-| `EVENT_006` | 409 | Already registered. The existing pass is returned instead. |
+| `EVENT_006` | 409 | **Never returned.** Registering twice is not an error: the existing pass comes back, with a freshly rotated `passCode` while it is still `registered`. |
 | `EVENT_007` | 422 | Registration closed. |
 | `EVENT_008` | 422 | An event must end after it starts. |
 | `EVENT_009` | 404 | No such event. A **draft** returns this same 404 to anyone who is not running it, so its existence is never confirmed. |
@@ -79,9 +85,9 @@ into the client repos' copy of this file.
 | Code | HTTP | Meaning |
 |---|---|---|
 | `SHOP_001` | 422 | Out of stock. `details.productId` names the line. |
-| `SHOP_002` | 422 | Discount would exceed the 20% cap. |
+| `SHOP_002` | 422 | **Never returned.** A request to spend more coins than the cap allows is CLAMPED to the cap, not refused — the server is authoritative on price and the client's number was only ever a preview. |
 | `SHOP_003` | 422 | Insufficient coins. |
-| `SHOP_004` | 409 | Duplicate order — same `idempotencyKey`. The original order is returned. |
+| `SHOP_004` | 409 | **Never returned.** A replayed `idempotencyKey` returns the original order, address included, with 201. |
 | `SHOP_005` | 404 | No such product, or it is no longer active. |
 | `SHOP_006` | 422 | Cart is empty. |
 | `SHOP_007` | 404 | No such delivery address **for this user**. Someone else's address returns this same 404. |
@@ -92,8 +98,8 @@ into the client repos' copy of this file.
 | Code | HTTP | Meaning |
 |---|---|---|
 | `POINTS_001` | 422 | Coin balance would go negative. |
-| `POINTS_002` | 409 | Reward already granted for this `(source, sourceId)`. Treated as a no-op, not an error. |
-| `POINTS_003` | 403 | Email not verified. Verification gates **earning**, not browsing or logging (PRD-v2 §4.4). |
+| `POINTS_002` | 409 | **Never returned.** A repeated `(source, sourceId)` is a no-op at the ledger, not an error. |
+| `POINTS_003` | 403 | Email not verified. **Never returned today.** `assertCanEarn` would throw it but has no call sites: every earning path goes through `award()`, which SKIPS a positive grant for an unverified user rather than failing the request. Branch on `reward.pointsDelta === 0` plus `user.emailVerified`, not on this code. |
 
 ## Organizations
 
@@ -128,3 +134,12 @@ rather than when the caller's access token happens to expire.
 | Code | HTTP | Meaning |
 |---|---|---|
 | `NOTIF_001` | 404 | No such notification **for this user**. A notification belonging to someone else returns this same 404, never 403 — a 403 would confirm the id exists. |
+
+## Gamification
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `GAME_001` | 404 | No tree in the catalogue with that slug. A **disabled** tree answers this too: it is retired, not deleted, and still sits in the forests of everyone who owns one. |
+
+A `?rarity=` filter naming an unknown rarity slug is **not** an error — it returns an empty page.
+A stale client filter should not read as a broken catalogue.

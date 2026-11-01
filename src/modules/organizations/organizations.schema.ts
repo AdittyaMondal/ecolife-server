@@ -38,6 +38,7 @@ export const organizationSchema = z
   .object({
     id: z.number().int().openapi({ example: 7 }),
     slug: z.string().openapi({ example: 'acme-industries' }),
+    code: z.string().openapi({ example: '482910' }),
     name: z.string().openapi({ example: 'Acme Industries' }),
     type: organizationTypeSchema,
     status: organizationStatusSchema,
@@ -51,6 +52,7 @@ export const organizationSchema = z
     memberCount: z.number().int().openapi({ example: 12 }),
     /** Only ever populated for an admin. A rejection note is not for the applicant. */
     reviewNote: z.string().nullable().openapi({ example: null }),
+    verificationDetails: z.record(z.string(), z.unknown()).nullable().optional(),
     reviewedAt: z.string().nullable().openapi({ example: null }),
     createdAt: z.string().openapi({ example: '2026-11-01T09:00:00.000Z' }),
   })
@@ -66,6 +68,7 @@ export const createOrganizationBodySchema = z
     contactPhone: z.string().max(32).optional(),
     city: z.string().max(80).optional(),
     regionCode: z.string().max(10).optional(),
+    verificationDetails: z.record(z.string(), z.unknown()).optional(),
   })
   .openapi('CreateOrganizationBody');
 
@@ -79,12 +82,79 @@ export const updateOrganizationBodySchema = createOrganizationBodySchema
 export const organizationMemberSchema = z
   .object({
     user: userSummarySchema,
+    email: z.string().email().optional().openapi({ example: 'colleague@acme.example.com' }),
     role: orgMemberRoleSchema,
     joinedAt: z.string().openapi({ example: '2026-11-01T09:00:00.000Z' }),
+    shareFootprint: z.boolean().default(true).openapi({ example: true }),
+    onboardingStatus: z.enum(['completed', 'pending']).openapi({ example: 'completed' }),
     pointsTotal: z.number().int().optional().openapi({ example: 450 }),
+    currentStreak: z.number().int().optional().openapi({ example: 5 }),
     baselineTotalKg: z.number().nullable().optional().openapi({ example: 6.8 }),
+    last30DaysTotalKg: z.number().nullable().optional().openapi({ example: 142.5 }),
+    avgDailyKg: z.number().nullable().optional().openapi({ example: 4.75 }),
+    reductionPct: z.number().nullable().optional().openapi({ example: 12.5 }),
+    lastActiveAt: z.string().nullable().optional().openapi({ example: '2026-10-31T18:30:00.000Z' }),
   })
   .openapi('OrganizationMember');
+
+export const listMembersQuerySchema = z.object({
+  search: z.string().optional().openapi({ example: 'Alice' }),
+  role: orgMemberRoleSchema.optional().openapi({ example: 'member' }),
+  onboardingStatus: z.enum(['completed', 'pending']).optional().openapi({ example: 'completed' }),
+});
+
+export const updateMembershipPreferencesBodySchema = z
+  .object({
+    shareFootprint: z.boolean().openapi({ example: true }),
+  })
+  .openapi('UpdateMembershipPreferencesBody');
+
+export const updateMembershipPreferencesResultSchema = z
+  .object({
+    updated: z.literal(true),
+    shareFootprint: z.boolean(),
+  })
+  .openapi('UpdateMembershipPreferencesResult');
+
+export const orgCategoryBreakdownSchema = z
+  .object({
+    transportKg: z.number().openapi({ example: 450.2 }),
+    foodKg: z.number().openapi({ example: 320.5 }),
+    homeEnergyKg: z.number().openapi({ example: 510.0 }),
+    waterKg: z.number().openapi({ example: 95.8 }),
+    wasteKg: z.number().openapi({ example: 64.1 }),
+    transportPct: z.number().openapi({ example: 31.3 }),
+    foodPct: z.number().openapi({ example: 22.2 }),
+    homeEnergyPct: z.number().openapi({ example: 35.4 }),
+    waterPct: z.number().openapi({ example: 6.7 }),
+    wastePct: z.number().openapi({ example: 4.4 }),
+  })
+  .openapi('OrgCategoryBreakdown');
+
+export const orgMonthlyTrendItemSchema = z
+  .object({
+    month: z.string().openapi({ example: '2026-10' }),
+    totalKg: z.number().openapi({ example: 1240.5 }),
+    avgPerEmployeeKg: z.number().openapi({ example: 62.0 }),
+    activeLoggers: z.number().int().openapi({ example: 20 }),
+  })
+  .openapi('OrgMonthlyTrendItem');
+
+export const organizationAnalyticsSchema = z
+  .object({
+    organizationId: z.number().int(),
+    totalFootprintKg: z.number().openapi({ example: 1440.6 }),
+    annualProjectedTonnes: z.number().openapi({ example: 17.5 }),
+    totalMembers: z.number().int().openapi({ example: 25 }),
+    activeLoggers: z.number().int().openapi({ example: 18 }),
+    avgPerEmployeeKg: z.number().openapi({ example: 57.6 }),
+    dailyPerCapitaKg: z.number().openapi({ example: 5.8 }),
+    urbanBenchmarkDailyKg: z.number().openapi({ example: 7.2 }),
+    reductionVsUrbanPct: z.number().openapi({ example: 19.4 }),
+    categories: orgCategoryBreakdownSchema,
+    monthlyTrend: z.array(orgMonthlyTrendItemSchema),
+  })
+  .openapi('OrganizationAnalytics');
 
 export const organizationMemberListSchema = z
   .object({
@@ -180,3 +250,115 @@ export const myOrganizationSchema = z
     role: nullable(orgMemberRoleSchema),
   })
   .openapi('MyOrganization');
+
+export const lookupQuerySchema = z.object({
+  code: z.string().min(1).max(20).openapi({ param: { name: 'code', in: 'query' }, example: '482910' }),
+});
+
+export const lookupResultSchema = z
+  .object({
+    valid: z.boolean().openapi({ example: true }),
+    name: z.string().openapi({ example: 'Acme Industries' }),
+    type: organizationTypeSchema,
+    slug: z.string().openapi({ example: 'acme-industries' }),
+    code: z.string().openapi({ example: '482910' }),
+  })
+  .openapi('OrganizationLookupResult');
+
+export const regenerateCodeResultSchema = z
+  .object({
+    code: z.string().length(6).openapi({ example: '719302' }),
+    organization: organizationSchema,
+  })
+  .openapi('RegenerateCodeResult');
+
+// --- Part 4: Custom Onboarding Questions -----------------------------------
+
+export const orgQuestionTypeSchema = z
+  .enum(['text', 'single_choice', 'multiple_choice', 'number', 'yes_no'])
+  .openapi('OrgQuestionType');
+
+export const orgQuestionSchema = z
+  .object({
+    id: z.number().int().openapi({ example: 1 }),
+    organizationId: z.number().int().openapi({ example: 42 }),
+    prompt: z.string().min(1).max(300).openapi({ example: 'What department do you work in?' }),
+    description: z.string().nullable().optional().openapi({ example: 'Used for team impact reports' }),
+    type: orgQuestionTypeSchema,
+    options: z.array(z.string()).nullable().optional().openapi({ example: ['Engineering', 'Sales', 'Design'] }),
+    required: z.boolean().openapi({ example: true }),
+    sortOrder: z.number().int().openapi({ example: 0 }),
+    version: z.number().int().openapi({ example: 1 }),
+    active: z.boolean().openapi({ example: true }),
+    createdAt: z.string().openapi({ example: '2026-11-01T00:00:00.000Z' }),
+    updatedAt: z.string().openapi({ example: '2026-11-01T00:00:00.000Z' }),
+  })
+  .openapi('OrgOnboardingQuestion');
+
+export const createOrgQuestionBodySchema = z
+  .object({
+    prompt: z.string().min(1).max(300).openapi({ example: 'What department do you work in?' }),
+    description: z.string().max(500).optional().openapi({ example: 'Used for team impact reports' }),
+    type: orgQuestionTypeSchema,
+    options: z.array(z.string().min(1).max(120)).optional().openapi({ example: ['Engineering', 'Sales', 'Design'] }),
+    required: z.boolean().default(false).openapi({ example: false }),
+  })
+  .openapi('CreateOrgQuestionBody');
+
+export const updateOrgQuestionBodySchema = z
+  .object({
+    prompt: z.string().min(1).max(300).optional(),
+    description: z.string().max(500).nullable().optional(),
+    type: orgQuestionTypeSchema.optional(),
+    options: z.array(z.string().min(1).max(120)).nullable().optional(),
+    required: z.boolean().optional(),
+  })
+  .openapi('UpdateOrgQuestionBody');
+
+export const reorderOrgQuestionsBodySchema = z
+  .object({
+    questionIds: z.array(z.number().int()).min(1).openapi({ example: [3, 1, 2] }),
+  })
+  .openapi('ReorderOrgQuestionsBody');
+
+export const orgAnswerInputSchema = z
+  .object({
+    questionId: z.number().int().openapi({ example: 1 }),
+    answer: z.unknown().openapi({ example: 'Engineering' }),
+  })
+  .openapi('OrgAnswerInput');
+
+export const submitOrgOnboardingAnswersBodySchema = z
+  .object({
+    answers: z.array(orgAnswerInputSchema),
+  })
+  .openapi('SubmitOrgOnboardingAnswersBody');
+
+export const orgAnswerItemSchema = z
+  .object({
+    id: z.number().int().openapi({ example: 10 }),
+    questionId: z.number().int().openapi({ example: 1 }),
+    questionPrompt: z.string().openapi({ example: 'What department do you work in?' }),
+    questionType: z.string().openapi({ example: 'single_choice' }),
+    questionVersion: z.number().int().openapi({ example: 1 }),
+    answer: z.unknown().openapi({ example: 'Engineering' }),
+    answeredAt: z.string().openapi({ example: '2026-11-01T00:00:00.000Z' }),
+  })
+  .openapi('OrgAnswerItem');
+
+export const orgEmployeeAnswersSchema = z
+  .object({
+    userId: z.number().int().openapi({ example: 7 }),
+    organizationId: z.number().int().openapi({ example: 42 }),
+    answers: z.array(orgAnswerItemSchema),
+  })
+  .openapi('OrgEmployeeAnswers');
+
+export const orgOnboardingStatusSchema = z
+  .object({
+    organization: organizationSchema,
+    questions: z.array(orgQuestionSchema),
+    answers: z.array(orgAnswerItemSchema),
+    isCompleted: z.boolean().openapi({ example: true }),
+  })
+  .openapi('OrgOnboardingStatus');

@@ -1,5 +1,5 @@
 /**
- * Drizzle schema barrel — 21 tables (PRD-v2 §7).
+ * Drizzle schema barrel — 28 tables (PRD-v2 §7).
  *
  * One file per table. Files in this directory use RELATIVE imports: drizzle-kit
  * loads this barrel through esbuild, which does not resolve tsconfig path
@@ -14,6 +14,7 @@
  *   - daily_log_client_unq          the offline queue can replay
  *   - event_pass_user_unq           registering twice returns the same pass
  *   - products_stock_non_negative   overselling fails the write
+ *   - tree_rarity_rank_unq          "rarer than" is a total order
  */
 
 export * from './addresses.ts';
@@ -35,6 +36,7 @@ export * from './lifestyle-profiles.ts';
 export * from './notifications.ts';
 export * from './orders.ts';
 export * from './organizations.ts';
+export * from './organization-questions.ts';
 // Marketplace
 export * from './products.ts';
 export * from './push-tokens.ts';
@@ -44,5 +46,8 @@ export * from './regions.ts';
 // Economy
 export * from './reward-transactions.ts';
 export * from './sessions.ts';
+// Gamification
+export * from './tree-rarities.ts';
+export * from './trees.ts';
 // Identity
 export * from './users.ts';

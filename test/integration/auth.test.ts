@@ -260,6 +260,7 @@ describe('organization membership', () => {
         .insert(organizations)
         .values({
           slug: `authtest-${crypto.randomUUID().slice(0, 8)}`,
+          code: String(Math.floor(100000 + Math.random() * 900000)),
           name: `Authtest Industries ${crypto.randomUUID().slice(0, 6)}`,
           type: 'industry',
         })
@@ -292,6 +293,7 @@ describe('organization membership', () => {
           .insert(organizations)
           .values({
             slug: `authtest-${crypto.randomUUID().slice(0, 8)}`,
+            code: String(Math.floor(100000 + Math.random() * 900000)),
             name: `Authtest NGO ${crypto.randomUUID().slice(0, 6)}`,
             type: 'ngo',
           })

@@ -107,13 +107,29 @@ export const trackTodaySchema = z
   .object({
     date: z.string().openapi({ example: '2026-10-31' }),
     existingLog: z
-      .object({ id: z.number().int(), answers: storedAnswersSchema, editableUntil: z.string() })
+      .object({
+        id: z.number().int(),
+        answers: storedAnswersSchema,
+        editableUntil: z.string().openapi({
+          example: '2026-11-01T02:00:00+05:30',
+          description:
+            'An ISO-8601 instant WITH offset — 02:00 the day after the log, in the ' +
+            "user's own timezone. Parse it as an instant; do not reinterpret the " +
+            "wall time in the device's zone.",
+        }),
+      })
       .nullable(),
     askCooling: z
       .boolean()
       .openapi({ example: true, description: 'False when the profile reports no cooling' }),
     defaults: storedAnswersSchema.openapi({
-      description: 'The one-tap "Same as usual" prefill, derived from the baseline',
+      description:
+        'The one-tap "Same as usual" prefill, derived from the baseline. `trips` holds ' +
+        'the commute as TWO legs of equal distance, not one: onboarding records a ' +
+        'one-way distance and a normal day is out and back. Label them as the outbound ' +
+        'and return journey rather than collapsing them — editing one leg (worked from ' +
+        'home in the afternoon, got a lift back) is the case this shape exists for. ' +
+        'A `work_from_home` profile gets an empty array.',
     }),
   })
   .openapi('TrackToday');

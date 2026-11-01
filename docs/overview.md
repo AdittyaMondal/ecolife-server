@@ -308,6 +308,7 @@ spec.
 | `marketplace` | Products, cart, coin-discount quoting, orders, delivery addresses |
 | `events` | Discovery, creation, registration, passes, QR check-in, co-host management |
 | `reference` | Notifications, upload presigning, cities, regions, carbon methodology |
+| `gamification` | The tree catalogue and rarity tiers; badges, reward rules and the user's forest as they land |
 
 ---
 
@@ -415,6 +416,9 @@ only by a service that might forget to check.
 | `events_checkins_within_registrations` | Cannot check in more people than registered |
 | `event_pass_user_unq` | Registering twice returns the existing pass |
 | `one_org_per_user` | A person belongs to at most one organization |
+| `tree_rarity_rank_unq` | One tier per rank, so "rarer than" is a total order and pity has something to compare |
+| `tree_rarity_weight_positive` | A tier in the roll pool always has a real chance of being drawn |
+| `trees_rarity_id_tree_rarities_id_fk` (RESTRICT) | A rarity cannot be deleted out from under the trees that reference it; retire it with `is_active` |
 
 ---
 

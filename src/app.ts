@@ -4,6 +4,7 @@ import { createModule } from '@common/openapi/factory.ts';
 import { env } from '@config/env.ts';
 import { authRoutes } from '@modules/auth/auth.routes.ts';
 import { eventRoutes } from '@modules/events/events.routes.ts';
+import { treeRoutes } from '@modules/gamification/gamification.routes.ts';
 import { goalRoutes } from '@modules/goals/goals.routes.ts';
 import { healthRoutes } from '@modules/health/health.routes.ts';
 import { homeRoutes } from '@modules/home/home.routes.ts';
@@ -54,6 +55,7 @@ app.route('/api/v1/users', publicUserRoutes);
 app.route('/api/v1/home', homeRoutes);
 app.route('/api/v1/track', trackRoutes);
 app.route('/api/v1/goals', goalRoutes);
+app.route('/api/v1/trees', treeRoutes);
 app.route('/api/v1/leaderboard', leaderboardRoutes);
 app.route('/api/v1/marketplace', marketplaceRoutes);
 app.route('/api/v1/addresses', addressRoutes);
@@ -111,6 +113,10 @@ app.doc31('/openapi.json', {
     {
       name: 'organizations',
       description: 'Partner organizations: registration, membership, admin review',
+    },
+    {
+      name: 'gamification',
+      description: 'Tree catalogue, badges, reward rules and the user forest',
     },
     { name: 'carbon', description: 'Public methodology and factor table' },
     { name: 'reference', description: 'Cities and regions' },

@@ -9,6 +9,7 @@ import {
 } from '@common/rewards/rewards.ts';
 import { env } from '@config/env.ts';
 import { db } from '@database/client.ts';
+import * as orgRepo from '@modules/organizations/organizations.repository.ts';
 import * as profileRepo from '@modules/profile/profile.repository.ts';
 import * as repo from './events.repository.ts';
 
@@ -40,6 +41,8 @@ function serialiseEvent(row: ViewRow, viewerId: number) {
     type: row.type,
     status: row.status,
     visibility: row.visibility,
+    organizationId: row.organizationId ?? null,
+    organizationName: row.organizationName ?? null,
     coverUrl: row.coverUrl,
     host: {
       id: row.hostUserId,
@@ -51,6 +54,7 @@ function serialiseEvent(row: ViewRow, viewerId: number) {
     endAt: row.endAt.toISOString(),
     venueName: row.venueName,
     venueAddress: row.venueAddress,
+    venueMapUrl: row.venueMapUrl ?? null,
     latitude: row.latitude,
     longitude: row.longitude,
     capacity: row.capacity,
@@ -69,6 +73,8 @@ function serialiseEvent(row: ViewRow, viewerId: number) {
 export type ListQuery = {
   filter: repo.ListFilter;
   type?: string;
+  search?: string;
+  organizationId?: number;
   lat?: number;
   lng?: number;
   radiusKm: number;
@@ -87,6 +93,8 @@ export async function list(viewerId: number, query: ListQuery): Promise<Page<Eve
     viewerId,
     filter: query.filter,
     type: query.type,
+    search: query.search,
+    organizationId: query.organizationId,
     lat: query.lat,
     lng: query.lng,
     radiusKm: query.radiusKm,
@@ -122,12 +130,14 @@ export type CreateEventBody = {
   title: string;
   description: string;
   type: string;
-  visibility: 'public' | 'invite_only';
+  visibility: 'public' | 'invite_only' | 'organization_only';
+  organizationId?: number | null;
   coverUrl?: string | null;
   startAt: string;
   endAt: string;
   venueName: string;
   venueAddress?: string;
+  venueMapUrl?: string | null;
   latitude?: number;
   longitude?: number;
   capacity: number;
@@ -146,6 +156,28 @@ export async function create(userId: number, body: CreateEventBody) {
     throw new DomainError('EVENT_008', 'An event has to end after it starts.', 422);
   }
 
+  let effectiveOrgId: number | null = body.organizationId ?? null;
+  if (!effectiveOrgId) {
+    const membership = await orgRepo.findMembership(userId);
+    if (membership) {
+      effectiveOrgId = membership.id;
+    }
+  }
+
+  if (body.visibility === 'organization_only') {
+    if (!effectiveOrgId) {
+      throw new DomainError(
+        'EVENT_010',
+        'Organization-only events require an associated organization.',
+        400,
+      );
+    }
+    const role = await orgRepo.findMemberRole(effectiveOrgId, userId);
+    if (!role) {
+      throw new DomainError('EVENT_011', 'You do not belong to that organization.', 403);
+    }
+  }
+
   const row = await repo.insertEvent({
     slug: await uniqueSlug(body.title),
     title: body.title,
@@ -153,12 +185,14 @@ export async function create(userId: number, body: CreateEventBody) {
     type: body.type as 'cleanup_drive',
     status: body.publish ? 'published' : 'draft',
     visibility: body.visibility,
+    organizationId: effectiveOrgId,
     coverUrl: body.coverUrl ?? null,
     hostId: userId,
     startAt,
     endAt,
     venueName: body.venueName,
     venueAddress: body.venueAddress ?? null,
+    venueMapUrl: body.venueMapUrl ?? null,
     latitude: body.latitude ?? null,
     longitude: body.longitude ?? null,
     capacity: body.capacity,
@@ -169,13 +203,44 @@ export async function create(userId: number, body: CreateEventBody) {
   return serialiseEvent(view, userId);
 }
 
-export async function bySlug(slug: string, viewerId: number) {
-  const row = await repo.findBySlug(slug, viewerId);
+/**
+ * Accepts a slug OR a numeric id.
+ *
+ * Every mutation on an event is keyed by id (`/events/{id}/register`,
+ * `/{id}/pass`, `/{id}/check-in`), so a client that holds an event — from a
+ * notification payload, a deep link, a pass — holds its id, and reading it
+ * back by that id 404'd. Making the one read endpoint take both costs a
+ * branch and saves every caller from carrying a second key around.
+ *
+ * `/^\d+$/` and not `Number()`: slugs are generated from titles, so a title
+ * of "2026" produces the slug "2026", and a loose coercion would send it
+ * down the id path and 404 a real event.
+ */
+export async function bySlug(slugOrId: string, viewerId: number) {
+  const row = /^\d+$/.test(slugOrId)
+    ? await repo.findById(Number(slugOrId), viewerId)
+    : await repo.findBySlug(slugOrId, viewerId);
   if (!row) throw new DomainError('EVENT_009', 'Event not found.', 404);
   // A draft is invisible to everyone but the people running it. Same 404 as
   // a nonexistent event, so its existence is not confirmed.
   const canSee = row.status !== 'draft' || row.hostId === viewerId || row.coHostRole !== null;
   if (!canSee) throw new DomainError('EVENT_009', 'Event not found.', 404);
+
+  // Organization-only events are visible only to members or hosts/co-hosts.
+  if (row.visibility === 'organization_only' && row.organizationId) {
+    const isHost = row.hostId === viewerId || row.coHostRole !== null;
+    if (!isHost) {
+      const role = await orgRepo.findMemberRole(row.organizationId, viewerId);
+      if (!role) {
+        throw new DomainError(
+          'EVENT_012',
+          'This event is exclusive to members of the hosting organization.',
+          403,
+        );
+      }
+    }
+  }
+
   return serialiseEvent(row, viewerId);
 }
 
@@ -196,9 +261,11 @@ export async function update(userId: number, id: number, body: Partial<CreateEve
     'description',
     'type',
     'visibility',
+    'organizationId',
     'coverUrl',
     'venueName',
     'venueAddress',
+    'venueMapUrl',
     'latitude',
     'longitude',
     'capacity',
@@ -231,8 +298,9 @@ function passView(pass: repo.PassRow, event: repo.EventRow, passCode: string | n
     eventStartAt: event.startAt.toISOString(),
     venueName: event.venueName,
     status: pass.status,
-    // Only ever non-null on the response that minted it. We store a hash, so
-    // it genuinely cannot be produced again.
+    // Empty unless THIS response minted or rotated the code. We store only a
+    // hash, so a past code cannot be produced again — POST /events/{id}/register
+    // rotates and returns a fresh one for the owner. GET /pass never can.
     passCode: passCode ?? '',
     qrPayload: passCode ? `${env.MOBILE_SCHEME}://pass/${passCode}` : '',
     checkedInAt: pass.checkedInAt?.toISOString() ?? null,
@@ -256,13 +324,51 @@ export async function register(userId: number, eventId: number) {
   const event = await repo.rawEvent(eventId);
   if (!event) throw new DomainError('EVENT_009', 'Event not found.', 404);
 
+  // Organization-only events are exclusive to members of that organization.
+  if (event.visibility === 'organization_only' && event.organizationId) {
+    const isHost = event.hostId === userId;
+    if (!isHost) {
+      const role = await orgRepo.findMemberRole(event.organizationId, userId);
+      if (!role) {
+        throw new DomainError(
+          'EVENT_012',
+          'This event is exclusive to members of the hosting organization.',
+          403,
+        );
+      }
+    }
+  }
+
   const existing = await repo.findPass(eventId, userId);
   if (existing && existing.status !== 'cancelled') {
-    // Idempotent: registering twice returns the pass you already have. The
-    // code cannot be shown again — it was only ever held in plaintext once.
+    /**
+     * Idempotent in the sense that matters — no second seat, no second
+     * reward — but a pass that is still usable gets a FRESH code instead of
+     * the empty string it used to return.
+     *
+     * We store only a SHA-256 hash, so the original plaintext genuinely
+     * cannot be produced again; a reinstall or a second device was therefore
+     * left holding a pass with no QR and no way to get one. Minting a new
+     * code for the authenticated owner is the only recovery that does not
+     * mean keeping check-in credentials readable at rest. The old code stops
+     * working, which is correct for a rotated bearer token — whoever still
+     * has that QR is not necessarily the account holder.
+     *
+     * Only while `registered`. A checked-in or no-show pass is spent, and
+     * handing it a working code again would undo the check-in rules.
+     *
+     * The registration window is deliberately NOT re-checked: they already
+     * registered, and this is recovering the pass, not claiming a seat.
+     */
+    const code = existing.status === 'registered' ? mintRefreshToken() : null;
+    const pass = code
+      ? ((await repo.updatePass(db, existing.id, { passCodeHash: await hashToken(code) })) ??
+        existing)
+      : existing;
+
     const view = await repo.findById(eventId, userId);
     if (!view) throw new DomainError('EVENT_009', 'Event not found.', 404);
-    return { pass: passView(existing, event, null), event: serialiseEvent(view, userId) };
+    return { pass: passView(pass, event, code), event: serialiseEvent(view, userId) };
   }
 
   if (event.status !== 'published' && event.status !== 'ongoing') {
@@ -330,11 +436,45 @@ export async function participants(userId: number, eventId: number) {
     items: rows.map((r) => ({
       passId: r.passId,
       user: { id: r.userId, name: r.name, avatarUrl: r.avatarUrl, city: r.city },
+      email: r.email,
       status: r.status,
       registeredAt: r.registeredAt.toISOString(),
       checkedInAt: r.checkedInAt?.toISOString() ?? null,
     })),
   };
+}
+
+export async function exportParticipantsCsv(userId: number, eventId: number): Promise<string> {
+  await assertHost(eventId, userId, true);
+  const rows = await repo.listParticipants(eventId);
+
+  const headers = [
+    'Pass ID',
+    'User ID',
+    'Name',
+    'Email',
+    'Status',
+    'Registered At',
+    'Checked In At',
+  ];
+  const lines = [headers.join(',')];
+
+  for (const r of rows) {
+    const escape = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    lines.push(
+      [
+        r.passId,
+        r.userId,
+        escape(r.name),
+        escape(r.email),
+        escape(r.status),
+        escape(r.registeredAt.toISOString()),
+        escape(r.checkedInAt ? r.checkedInAt.toISOString() : ''),
+      ].join(','),
+    );
+  }
+
+  return lines.join('\n');
 }
 
 /** True when this user hosts or co-hosts the event. */

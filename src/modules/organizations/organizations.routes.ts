@@ -7,15 +7,29 @@ import { createRoute, z } from '@hono/zod-openapi';
 import {
   addMemberBodySchema,
   createOrganizationBodySchema,
+  createOrgQuestionBodySchema,
   joinOrganizationBodySchema,
   joinResultSchema,
   leaveResultSchema,
+  listMembersQuerySchema,
+  lookupQuerySchema,
+  lookupResultSchema,
   myOrganizationSchema,
+  orgEmployeeAnswersSchema,
+  orgOnboardingStatusSchema,
+  orgQuestionSchema,
+  organizationAnalyticsSchema,
   organizationMemberListSchema,
   organizationQuerySchema,
   organizationSchema,
+  regenerateCodeResultSchema,
+  reorderOrgQuestionsBodySchema,
   reviewOrganizationBodySchema,
+  submitOrgOnboardingAnswersBodySchema,
+  updateMembershipPreferencesBodySchema,
+  updateMembershipPreferencesResultSchema,
   updateOrganizationBodySchema,
+  updateOrgQuestionBodySchema,
 } from './organizations.schema.ts';
 import * as service from './organizations.service.ts';
 
@@ -109,10 +123,10 @@ organizationRoutes.openapi(
     method: 'get',
     path: '/{id}/members',
     tags: ['organizations'],
-    summary: 'Roster — any member may read it',
+    summary: 'Roster — any member may read it; insights filtered by privacy and role',
     middleware: [requireUser] as const,
     security: secured,
-    request: { params: idParam },
+    request: { params: idParam, query: listMembersQuerySchema },
     responses: {
       200: jsonOk(organizationMemberListSchema, 'Members'),
       401: errorResponses[401],
@@ -120,7 +134,38 @@ organizationRoutes.openapi(
       404: errorResponses[404],
     },
   }),
-  async (c) => ok(c, await service.members(c.get('user').id, c.req.valid('param').id), 200),
+  async (c) =>
+    ok(
+      c,
+      await service.members(
+        c.get('user').id,
+        c.req.valid('param').id,
+        c.req.valid('query'),
+      ),
+      200,
+    ),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/{id}/analytics',
+    tags: ['organizations'],
+    summary: 'Cumulative organization carbon footprint analytics (owner only)',
+    description:
+      'Aggregated organization-level footprint: total emissions, per-month trend, category breakdown, and average per employee.',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: { params: idParam },
+    responses: {
+      200: jsonOk(organizationAnalyticsSchema, 'Organization Analytics'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(c, await service.analytics(c.get('user').id, c.req.valid('param').id), 200),
 );
 
 organizationRoutes.openapi(
@@ -218,6 +263,75 @@ organizationRoutes.openapi(
 
 organizationRoutes.openapi(
   createRoute({
+    method: 'patch',
+    path: '/me/membership',
+    tags: ['organizations'],
+    summary: 'Update membership preferences (e.g. carbon footprint privacy sharing)',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      body: {
+        content: { 'application/json': { schema: updateMembershipPreferencesBodySchema } },
+        required: true,
+      },
+    },
+    responses: {
+      200: jsonOk(updateMembershipPreferencesResultSchema, 'Preferences updated'),
+      400: errorResponses[400],
+      401: errorResponses[401],
+      403: errorResponses[403],
+    },
+  }),
+  async (c) =>
+    ok(
+      c,
+      await service.updateMembershipPreferences(
+        c.get('user').id,
+        c.req.valid('json').shareFootprint,
+      ),
+      200,
+    ),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/lookup',
+    tags: ['organizations'],
+    summary: 'Validate organization code before signup',
+    description:
+      'Public endpoint to check if an organization code exists and is approved to accept members.',
+    request: { query: lookupQuerySchema },
+    responses: {
+      200: jsonOk(lookupResultSchema, 'Organization found and active'),
+      400: errorResponses[400],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) => ok(c, await service.lookupByCode(c.req.valid('query').code), 200),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/me/code/regenerate',
+    tags: ['organizations'],
+    summary: 'Regenerate organization 6-digit code (owner only)',
+    middleware: [requireUser] as const,
+    security: secured,
+    responses: {
+      200: jsonOk(regenerateCodeResultSchema, 'New 6-digit code generated'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) => ok(c, await service.regenerateCode(c.get('user').id), 200),
+);
+
+organizationRoutes.openapi(
+  createRoute({
     method: 'post',
     path: '/join',
     tags: ['organizations'],
@@ -240,6 +354,250 @@ organizationRoutes.openapi(
     },
   }),
   async (c) => ok(c, await service.joinByCode(c.get('user').id, c.req.valid('json').code), 200),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/{id}/questions',
+    tags: ['organizations'],
+    summary: 'List custom onboarding questions for an organization',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: { params: idParam },
+    responses: {
+      200: jsonOk(z.array(orgQuestionSchema), 'Questions list'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(c, await service.listQuestions(c.get('user').id, c.req.valid('param').id), 200),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/{id}/questions',
+    tags: ['organizations'],
+    summary: 'Create a custom onboarding question (owner only)',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      params: idParam,
+      body: {
+        content: { 'application/json': { schema: createOrgQuestionBodySchema } },
+        required: true,
+      },
+    },
+    responses: {
+      201: jsonOk(orgQuestionSchema, 'Question created'),
+      400: errorResponses[400],
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(
+      c,
+      await service.createQuestion(
+        c.get('user').id,
+        c.req.valid('param').id,
+        c.req.valid('json'),
+      ),
+      201,
+    ),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'put',
+    path: '/{id}/questions/{questionId}',
+    tags: ['organizations'],
+    summary: 'Update a custom onboarding question (owner only)',
+    description: 'Updating the prompt or type increments the question version so previous answers remain faithful snapshots.',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      params: z.object({
+        id: z.coerce.number().int().positive().openapi({ example: 42 }),
+        questionId: z.coerce.number().int().positive().openapi({ example: 1 }),
+      }),
+      body: {
+        content: { 'application/json': { schema: updateOrgQuestionBodySchema } },
+        required: true,
+      },
+    },
+    responses: {
+      200: jsonOk(orgQuestionSchema, 'Question updated'),
+      400: errorResponses[400],
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(
+      c,
+      await service.updateQuestion(
+        c.get('user').id,
+        c.req.valid('param').id,
+        c.req.valid('param').questionId,
+        c.req.valid('json'),
+      ),
+      200,
+    ),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/{id}/questions/reorder',
+    tags: ['organizations'],
+    summary: 'Reorder custom onboarding questions (owner only)',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      params: idParam,
+      body: {
+        content: { 'application/json': { schema: reorderOrgQuestionsBodySchema } },
+        required: true,
+      },
+    },
+    responses: {
+      200: jsonOk(z.object({ ok: z.boolean().openapi({ example: true }) }), 'Reordered'),
+      400: errorResponses[400],
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(
+      c,
+      await service.reorderQuestions(
+        c.get('user').id,
+        c.req.valid('param').id,
+        c.req.valid('json').questionIds,
+      ),
+      200,
+    ),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/{id}/questions/{questionId}',
+    tags: ['organizations'],
+    summary: 'Delete (archive) a custom onboarding question (owner only)',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      params: z.object({
+        id: z.coerce.number().int().positive().openapi({ example: 42 }),
+        questionId: z.coerce.number().int().positive().openapi({ example: 1 }),
+      }),
+    },
+    responses: {
+      200: jsonOk(z.object({ ok: z.boolean().openapi({ example: true }) }), 'Deleted'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(
+      c,
+      await service.deleteQuestion(
+        c.get('user').id,
+        c.req.valid('param').id,
+        c.req.valid('param').questionId,
+      ),
+      200,
+    ),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/me/onboarding',
+    tags: ['organizations'],
+    summary: 'Get custom onboarding questions and current answers for the caller',
+    middleware: [requireUser] as const,
+    security: secured,
+    responses: {
+      200: jsonOk(orgOnboardingStatusSchema, 'Custom onboarding questions and answers'),
+      401: errorResponses[401],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) => ok(c, await service.getOnboardingQuestionsAndAnswers(c.get('user').id), 200),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/me/onboarding',
+    tags: ['organizations'],
+    summary: 'Submit answers for custom onboarding questions',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      body: {
+        content: { 'application/json': { schema: submitOrgOnboardingAnswersBodySchema } },
+        required: true,
+      },
+    },
+    responses: {
+      200: jsonOk(
+        z.object({
+          ok: z.boolean().openapi({ example: true }),
+          count: z.number().int().openapi({ example: 3 }),
+        }),
+        'Answers submitted',
+      ),
+      400: errorResponses[400],
+      401: errorResponses[401],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(c, await service.submitOnboardingAnswers(c.get('user').id, c.req.valid('json')), 200),
+);
+
+organizationRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/{id}/members/{userId}/answers',
+    tags: ['organizations'],
+    summary: "View a member's custom onboarding answers (owner only)",
+    middleware: [requireUser] as const,
+    security: secured,
+    request: {
+      params: z.object({
+        id: z.coerce.number().int().positive().openapi({ example: 42 }),
+        userId: z.coerce.number().int().positive().openapi({ example: 7 }),
+      }),
+    },
+    responses: {
+      200: jsonOk(orgEmployeeAnswersSchema, 'Member answers'),
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) =>
+    ok(
+      c,
+      await service.getMemberAnswers(
+        c.get('user').id,
+        c.req.valid('param').id,
+        c.req.valid('param').userId,
+      ),
+      200,
+    ),
 );
 
 /** Mounted at /admin/organizations. Every route here is staff-only. */

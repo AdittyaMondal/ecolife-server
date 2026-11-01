@@ -201,6 +201,51 @@ const ARCHETYPES = {
   },
 } as const satisfies Record<string, Archetype>;
 
+/**
+ * Avatar photo ids, one per seeded account by position.
+ *
+ * `fit=facearea` is the reason these are ids and not whole URLs: Unsplash
+ * crops to the detected face, so a wide shot still yields a usable round
+ * avatar and the list does not have to be hand-curated headshots. Every id
+ * was checked to return 200 — a 404 here is worse than no avatar, because
+ * the UI's initials fallback never gets a chance to run.
+ *
+ * Indexed, not random: reseeding must not reshuffle who has which face.
+ */
+const AVATAR_PHOTO_IDS: readonly string[] = [
+  '1607346256330-dee7af15f7c5',
+  '1536766768598-e09213fdcf22',
+  '1725033489648-a819750348eb',
+  '1535270732370-dd3188bab1da',
+  '1616305798947-6cb245a84e18',
+  '1651471239473-d46bb9202269',
+  '1584367034980-8ba72c175f4f',
+  '1651471240308-0c6baf0e078f',
+  '1651471239744-5ed82795d6a3',
+  '1651471239853-b105a5c133e7',
+  '1651471240055-4bf278508834',
+  '1782289819142-a4232301521a',
+  '1699537347156-870215406540',
+  '1670679897756-c086f8d26f36',
+  '1628477116196-48afe0d209e0',
+  '1622207691293-5cd80466dab3',
+  '1552113125-81af17f36b57',
+  '1674278882093-3870ef98e826',
+  '1526392195523-1f40e4e78117',
+  '1667382137969-a11fd256717d',
+  '1666115982747-50e2986ec5ad',
+  '1727179297202-b1032c0f37eb',
+  '1617297873650-aef8f4e00b9b',
+  '1463335361701-e90f4c5045d0',
+  '1607867856297-085b093eb8e8',
+  '1727179299533-c5fd6092851c',
+  '1697517874153-0384d16722fd',
+];
+
+const avatarUrl = (index: number) =>
+  `https://images.unsplash.com/photo-${AVATAR_PHOTO_IDS[index % AVATAR_PHOTO_IDS.length]}` +
+  '?auto=format&fit=facearea&facepad=3&w=256&h=256&q=70';
+
 type SeedUser = {
   name: string;
   /** Inserted lowercase: uniqueness is a unique index on lower(email). */
@@ -725,9 +770,10 @@ export async function seedUsers(
   const inserted = await tx
     .insert(users)
     .values(
-      plans.map((p) => ({
+      plans.map((p, index) => ({
         name: p.user.name,
         email: p.user.email.toLowerCase(),
+        avatarUrl: avatarUrl(index),
         passwordHash,
         role: p.user.admin ? ('admin' as const) : ('user' as const),
         emailVerifiedAt: p.verified ? istMoment(DAYS + 5, 10) : null,

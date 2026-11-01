@@ -195,6 +195,11 @@ export async function canEarn(tx: Executor, userId: number): Promise<boolean> {
 /**
  * Throws when the caller may not earn.
  *
+ * NO CALL SITES. Kept because the rule below is the one that was got wrong
+ * once already, and a reader reaching for a throwing gate should meet it
+ * here. `POINTS_003` is therefore never actually returned — docs/error-codes.md
+ * says so, so no client writes a branch for it.
+ *
  * Use this ONLY where earning is the entire point of the request. On a path
  * that also does something the user is entitled to regardless — finishing
  * onboarding, logging a day — call `canEarn` and skip the grant instead.

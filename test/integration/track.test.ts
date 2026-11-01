@@ -458,3 +458,83 @@ describe('GET /track/history', () => {
     TIMEOUT,
   );
 });
+
+/**
+ * Regressions reported from the mobile client on 1 Nov 2026 (B3, B4).
+ *
+ * Both are about what the client is TOLD, not about what is stored: a second
+ * device got a 500 where a 409 was already specified, and the edit deadline
+ * came back as a bare local string that every client parsed in its own zone.
+ */
+describe('what the client is told about a day', () => {
+  it(
+    'answers a second clientLogId for the same date with TRACK_001, not INTERNAL_001',
+    async () => {
+      const { token, userId } = await onboarded();
+      const logDate = localDate(TZ);
+
+      const first = await call('/track/logs', {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ clientLogId: crypto.randomUUID(), logDate, answers: GREEN_DAY }),
+      });
+      expect(first.status).toBe(200);
+
+      // A DIFFERENT client id for a date that is already logged — a second
+      // device, or a reinstall whose offline queue was lost. Not a replay.
+      const clash = await call('/track/logs', {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ clientLogId: crypto.randomUUID(), logDate, answers: GREEN_DAY }),
+      });
+      const body = await json(clash);
+
+      expect(clash.status).toBe(409);
+      expect(body.error.code).toBe('TRACK_001');
+      expect(body.error.details.logDate).toBe(logDate);
+
+      // The rolled-back attempt must not have left a second log or a second
+      // reward behind — a 409 that half-wrote is worse than the 500 was.
+      const logs = await db
+        .select({ id: dailyLogs.id })
+        .from(dailyLogs)
+        .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.logDate, logDate)));
+      expect(logs).toHaveLength(1);
+
+      const ledger = await db
+        .select({ id: rewardTransactions.id })
+        .from(rewardTransactions)
+        .where(
+          and(
+            eq(rewardTransactions.userId, userId),
+            eq(rewardTransactions.sourceId, `daily_log:${logs[0]?.id}`),
+          ),
+        );
+      expect(ledger).toHaveLength(1);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'returns editableUntil as an instant carrying the offset of the user timezone',
+    async () => {
+      const { token } = await onboarded();
+      const logDate = localDate(TZ);
+      await call('/track/logs', {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ clientLogId: crypto.randomUUID(), logDate, answers: GREEN_DAY }),
+      });
+
+      const body = await json(await call('/track/today', { headers: auth(token) }));
+      const editableUntil = body.data.existingLog.editableUntil as string;
+
+      // The fixture is Asia/Kolkata. A bare '…T02:00:00' would be read as
+      // 02:00 UTC by a client elsewhere — five and a half hours wrong.
+      expect(editableUntil).toMatch(/[+-]\d{2}:\d{2}$|Z$/);
+      expect(editableUntil.endsWith('+05:30')).toBe(true);
+      expect(Number.isNaN(Date.parse(editableUntil))).toBe(false);
+    },
+    TIMEOUT,
+  );
+});

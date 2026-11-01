@@ -160,7 +160,16 @@ export type PlaceOrderBody = {
  */
 export async function placeOrder(userId: number, body: PlaceOrderBody) {
   const existing = await repo.findOrderByKey(userId, body.idempotencyKey);
-  if (existing) return serialiseOrder(existing, await itemsOf([existing.id]), null);
+  if (existing) {
+    // A replay must return what the first call returned, address included.
+    // It used to drop it, so a retried checkout — the ONE case this path
+    // exists for — answered with a different shape than the original.
+    const [items, replayed] = await Promise.all([
+      itemsOf([existing.id]),
+      existing.addressId ? repo.findAddress(userId, existing.addressId) : Promise.resolve(null),
+    ]);
+    return serialiseOrder(existing, items, replayed);
+  }
 
   const [lines, user, address] = await Promise.all([
     repo.listCart(userId),
@@ -249,14 +258,22 @@ export async function orders(
 ): Promise<Page<ReturnType<typeof serialiseOrder>>> {
   const rows = await repo.listOrders(userId, limit, decodeIdCursor(cursor));
   const page = toPage(rows, limit, (r) => r.id);
-  const items = await itemsOf(page.items.map((o) => o.id));
+  const [items, addresses] = await Promise.all([
+    itemsOf(page.items.map((o) => o.id)),
+    // One query for the whole page, not one per order. Serialising null here
+    // forced the client to refetch every order by id to show a delivery line.
+    repo.findAddressesByIds(userId, [
+      ...new Set(page.items.map((o) => o.addressId).filter((id): id is number => id !== null)),
+    ]),
+  ]);
+  const addressById = new Map(addresses.map((a) => [a.id, a]));
 
   return {
     items: page.items.map((o) =>
       serialiseOrder(
         o,
         items.filter((i) => i.orderId === o.id),
-        null,
+        o.addressId === null ? null : (addressById.get(o.addressId) ?? null),
       ),
     ),
     pageInfo: page.pageInfo,

@@ -67,7 +67,7 @@ const PRODUCT_IMAGES: Record<string, string> = {
   'led-bulb-pack-4':
     'https://images.unsplash.com/photo-1507499739999-097706ad8914?auto=format&fit=crop&w=800&q=80',
   'solar-lantern':
-    'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1698553497889-704f27f3d170?auto=format&fit=crop&w=800&q=80',
   'jute-laundry-basket':
     'https://images.unsplash.com/photo-1595341888016-a392ef81b7de?auto=format&fit=crop&w=800&q=80',
   'cloth-shopping-bags-5':
@@ -75,7 +75,7 @@ const PRODUCT_IMAGES: Record<string, string> = {
   'bamboo-toothbrush-4':
     'https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?auto=format&fit=crop&w=800&q=80',
   'shampoo-bar':
-    'https://images.unsplash.com/photo-1608248597359-55006b533a0b?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1584305574647-0cc949a2bb9f?auto=format&fit=crop&w=800&q=80',
   'neem-wood-comb':
     'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=800&q=80',
   'menstrual-cup':
@@ -89,13 +89,13 @@ const PRODUCT_IMAGES: Record<string, string> = {
   'beeswax-food-wraps-3':
     'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=800&q=80',
   'bamboo-cutlery-travel-set':
-    'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1557687790-902ede7ab58c?auto=format&fit=crop&w=800&q=80',
   'clay-cookware-handi':
     'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=800&q=80',
   'recycled-notebook-a5':
     'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80',
   'seed-pencils-10':
-    'https://images.unsplash.com/photo-1585336261026-407421cb4172?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?auto=format&fit=crop&w=800&q=80',
   'jute-laptop-sleeve':
     'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80',
 };
@@ -111,6 +111,8 @@ const INACTIVE = new Set(['jute-laptop-sleeve']);
  * record that must not lose what was in it.
  */
 export async function seedProducts(tx: Tx): Promise<number> {
+  // Every slug in CATALOGUE has its own entry in PRODUCT_IMAGES; the `??`
+  // below is a floor for a slug added without one, not a row that uses it.
   const rows: Row[] = CATALOGUE.map(([slug, name, category, pricePaise, stock, co2SavedKg]) => ({
     slug,
     name,

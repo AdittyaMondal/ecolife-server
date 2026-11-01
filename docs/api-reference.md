@@ -4,13 +4,13 @@
 > Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
 > fails CI when this file is stale.
 
-**Version** 0.1.0 · **Base path** `/api/v1` · **64 paths** · **75 operations** · **93 schemas**
+**Version** 0.1.0 · **Base path** `/api/v1` · **76 paths** · **91 operations** · **113 schemas**
 
 ---
 
 ## Before you read this
 
-**Every endpoint below is implemented.** All 65 operations run against the real
+**Every endpoint below is implemented.** All 91 operations run against the real
 database; none returns `GEN_501` any more. Point your client at the server, not
 at the mock — the mock serves the *examples* in this document, so it will happily
 return a plausible shape for a request the real server would reject.
@@ -66,10 +66,11 @@ an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` acce
 - [home](#home) — 1 operation
 - [track](#track) — 4 operations
 - [goals](#goals) — 5 operations
+- [gamification](#gamification) — 3 operations
 - [leaderboard](#leaderboard) — 2 operations
 - [marketplace](#marketplace) — 14 operations
-- [events](#events) — 13 operations
-- [organizations](#organizations) — 10 operations
+- [events](#events) — 14 operations
+- [organizations](#organizations) — 22 operations
 - [reference](#reference) — 5 operations
 - [carbon](#carbon) — 1 operation
 - [Schemas](#schemas)
@@ -151,7 +152,13 @@ Always 200, whether or not the address exists — it must not leak registration.
 
 🔓 No authentication.
 
-Failures are deliberately indistinguishable between unknown and wrong-password.
+Failures are deliberately indistinguishable between unknown and wrong-password. Send `x-ecolife-platform: ios|android` to get `session.refreshToken` in the body.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `x-ecolife-platform` | header | no | `ios` \| `android` \| `web` | e.g. `"android"` |
 
 **Request body** (required) — [`LoginBody`](#loginbody)
 
@@ -202,6 +209,12 @@ Failures are deliberately indistinguishable between unknown and wrong-password.
 
 Accepts the token from the httpOnly cookie (web) or the body (mobile). Rotates on every use; a replayed token revokes the whole family.
 
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `x-ecolife-platform` | header | no | `ios` \| `android` \| `web` | e.g. `"android"` |
+
 **Request body** — [`RefreshBody`](#refreshbody)
 
 | Field | Type | Required | Notes |
@@ -221,7 +234,13 @@ Accepts the token from the httpOnly cookie (web) or the body (mobile). Rotates o
 
 🔓 No authentication.
 
-Rate limited to 10 per 15 minutes per IP and per email. Email verification is required before any reward can be earned (PRD-v2 §4.4).
+Rate limited to 10 per 15 minutes per IP and per email. Email verification is required before any reward can be earned (PRD-v2 §4.4). Send `x-ecolife-platform: ios|android` to get `session.refreshToken` in the body; without it you are treated as a browser and the token is set as an httpOnly cookie with the body field null.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `x-ecolife-platform` | header | no | `ios` \| `android` \| `web` | e.g. `"android"` |
 
 **Request body** (required) — [`RegisterBody`](#registerbody)
 
@@ -232,6 +251,7 @@ Rate limited to 10 per 15 minutes per IP and per email. Email verification is re
 | `password` | string | yes | e.g. `"correct horse battery"` |
 | `phone` | string | no | e.g. `"+919876543210"` |
 | `timezone` | string | no | e.g. `"Asia/Kolkata"`. default `"Asia/Kolkata"` |
+| `organizationCode` | string | no | Optional 6-digit organization code to link user upon signup. e.g. `"482910"` |
 
 **Responses**
 
@@ -239,6 +259,8 @@ Rate limited to 10 per 15 minutes per IP and per email. Email verification is re
 |---|---|---|
 | `201` | Account created | [`AuthResult`](#authresult) |
 | `400` | Validation failed | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
 | `409` | Conflict | null |
 | `429` | Rate limited — see Retry-After | null |
 
@@ -354,7 +376,7 @@ Recomputes the baseline forward only. Past daily_footprints rows carry their own
 |---|---|---|---|
 | `name` | string | no |  |
 | `timezone` | string | no | e.g. `"Asia/Kolkata"` |
-| `avatarUrl` | string,null (uri) | no | e.g. `"https://cdn.ecolife.app/avatars/abc123.webp"` |
+| `avatarUrl` | string,null (uri) | no | Any https URL the caller controls, or one returned by POST /uploads/presign.. e.g. `"https://images.unsplash.com/photo-1607346256330-dee7af15f7c5?auto=format&fit=facearea&facepad=3&w=256&h=256&q=70"` |
 | `answers` | [`OnboardingAnswers`](#onboardinganswers) | no |  |
 
 **Responses**
@@ -536,7 +558,7 @@ Budget: under 250 ms p95. One round trip, one payload, no client-side fan-out.
 
 🔒 Requires a bearer token.
 
-One transaction: validate, compute 5 categories, upsert the footprint, update the streak, evaluate the active goal, award rewards. Idempotent on (user, clientLogId), so an offline queue can replay safely. The response carries everything the result sheet needs — no refetch required.
+One transaction: validate, compute 5 categories, upsert the footprint, update the streak, evaluate the active goal, award rewards. Idempotent on (user, clientLogId), so an offline queue can replay safely. The response carries everything the result sheet needs — no refetch required. Replaying the SAME clientLogId returns the first result and awards nothing twice; a DIFFERENT clientLogId for a date that is already logged is TRACK_001 (409) — edit that log instead.
 
 **Request body** (required) — [`SubmitLogBody`](#submitlogbody)
 
@@ -553,6 +575,7 @@ One transaction: validate, compute 5 categories, upsert the footprint, update th
 | `200` | Footprint computed and rewards granted | [`LogResult`](#logresult) |
 | `400` | Validation failed | null |
 | `401` | Not authenticated | null |
+| `409` | Conflict | null |
 | `422` | Domain rule violation | null |
 | `429` | Rate limited — see Retry-After | null |
 
@@ -727,6 +750,72 @@ Recomputes and re-freezes the target.
 | `200` | Progress | [`GoalProgress`](#goalprogress) |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
+
+---
+
+## gamification
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/trees`](#get-api-v1-trees)  | The tree catalogue — public |
+| `GET` | [`/api/v1/trees/{slug}`](#get-api-v1-trees-slug)  | One catalogue entry — public |
+| `GET` | [`/api/v1/trees/rarities`](#get-api-v1-trees-rarities)  | Rarity tiers and their drop weights — public |
+
+### `GET` `/api/v1/trees`
+
+**The tree catalogue — public**
+
+🔓 No authentication.
+
+Every tree a user can be rewarded with. `rarity` filters by rarity slug; an unknown slug is an empty page rather than a 404, so a stale filter does not look like an outage.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `rarity` | query | no | string | e.g. `"rare"` |
+| `cursor` | query | no | string |  |
+| `limit` | query | no | integer | e.g. `20`. default `20` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Catalogue, newest first | object |
+| `400` | Validation failed | null |
+
+### `GET` `/api/v1/trees/{slug}`
+
+**One catalogue entry — public**
+
+🔓 No authentication.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `slug` | path | yes | string | e.g. `"neem"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Tree | [`Tree`](#tree) |
+| `404` | Not found | null |
+
+### `GET` `/api/v1/trees/rarities`
+
+**Rarity tiers and their drop weights — public**
+
+🔓 No authentication.
+
+Weights are relative, not percentages: divide one by the sum of the active tiers. Published deliberately — the roll is server-side, so the odds cost nothing to disclose.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Rarity tiers, rarest last | object |
 
 ---
 
@@ -995,6 +1084,8 @@ Drives the coin slider. discount = min(offered/10 x 100, 20% of subtotal, wallet
 
 🔒 Requires a bearer token.
 
+Each row carries its full `address`, so a list does not have to be followed by one GET per order to render a delivery line.
+
 **Parameters**
 
 | Name | In | Required | Type | Notes |
@@ -1015,7 +1106,9 @@ Drives the coin slider. discount = min(offered/10 x 100, 20% of subtotal, wallet
 
 🔒 Requires a bearer token.
 
-One transaction: decrement stock, insert the order with price snapshots, debit coins through the ledger. Replaying the same idempotencyKey returns the original order rather than charging twice.
+One transaction: decrement stock, insert the order with price snapshots, debit coins through the ledger. Replaying the same idempotencyKey returns the original order rather than charging twice — and returns it with its `address`, exactly as the first call did.
+
+THERE IS NO PAYMENT STEP, and this is the design, not an omission: PRD-v2 §6.5 says "No real-money payment in v2". Coins buy a DISCOUNT (capped at MAX_DISCOUNT_PCT of the subtotal); the remaining `totalPaise` is settled offline and fulfilment is manual. The order therefore goes straight to `placed` with no payment-method field, no gateway redirect and no webhook to wait for. Clients should present it as "order placed, pay on delivery", never as "paid".
 
 **Request body** (required) — [`PlaceOrderBody`](#placeorderbody)
 
@@ -1112,6 +1205,7 @@ One transaction: decrement stock, insert the order with price snapshots, debit c
 | `DELETE` | [`/api/v1/events/{id}/co-hosts/{userId}`](#delete-api-v1-events-id-co-hosts-userid) 🔒 | Remove a co-host (host only) |
 | `POST` | [`/api/v1/events/{id}/manual-check-in`](#post-api-v1-events-id-manual-check-in) 🔒 | Check in by participant id — the web fallback for a host without the app |
 | `GET` | [`/api/v1/events/{id}/participants`](#get-api-v1-events-id-participants) 🔒 | Participant list (host and co-hosts only) |
+| `GET` | [`/api/v1/events/{id}/participants/export`](#get-api-v1-events-id-participants-export) 🔒 | Export participant list as CSV (host only) |
 | `GET` | [`/api/v1/events/{id}/pass`](#get-api-v1-events-id-pass) 🔒 | Own pass, including the code for the QR |
 | `DELETE` | [`/api/v1/events/{id}/register`](#delete-api-v1-events-id-register) 🔒 | Cancel own registration |
 | `POST` | [`/api/v1/events/{id}/register`](#post-api-v1-events-id-register) 🔒 | Register and receive a pass |
@@ -1132,6 +1226,8 @@ The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
 |---|---|---|---|---|
 | `filter` | query | no | `upcoming` \| `nearby` \| `registered` \| `hosting` \| `past` | default `"upcoming"` |
 | `type` | query | no | `plant_drive` \| `cleanup_drive` \| `awareness` \| `recycling_drive` \| `workshop` \| `other` | e.g. `"cleanup_drive"` |
+| `search` | query | no | string |  |
+| `organizationId` | query | no | integer,null |  |
 | `lat` | query | no | number,null |  |
 | `lng` | query | no | number,null |  |
 | `radiusKm` | query | no | number | default `25` |
@@ -1159,12 +1255,14 @@ The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
 | `title` | string | yes | e.g. `"Beach clean-up, Versova"` |
 | `description` | string | yes |  |
 | `type` | `plant_drive` \| `cleanup_drive` \| `awareness` \| `recycling_drive` \| `workshop` \| `other` | yes | e.g. `"cleanup_drive"` |
-| `visibility` | `public` \| `invite_only` | no | e.g. `"public"`. default `"public"` |
+| `visibility` | `public` \| `invite_only` \| `organization_only` | no | e.g. `"public"`. default `"public"` |
+| `organizationId` | integer,null | no |  |
 | `coverUrl` | string,null | no |  |
 | `startAt` | string | yes | e.g. `"2026-11-02T01:30:00.000Z"` |
 | `endAt` | string | yes | e.g. `"2026-11-02T04:00:00.000Z"` |
 | `venueName` | string | yes |  |
 | `venueAddress` | string | no |  |
+| `venueMapUrl` | string,null | no |  |
 | `latitude` | number | no | range -90…90 |
 | `longitude` | number | no | range -180…180 |
 | `capacity` | integer | no | range 1…10000. default `100` |
@@ -1198,12 +1296,14 @@ The `nearby` filter requires lat/lng and ranks by Haversine distance in SQL.
 | `title` | string | no | e.g. `"Beach clean-up, Versova"` |
 | `description` | string | no |  |
 | `type` | `plant_drive` \| `cleanup_drive` \| `awareness` \| `recycling_drive` \| `workshop` \| `other` | no | e.g. `"cleanup_drive"` |
-| `visibility` | `public` \| `invite_only` | no | e.g. `"public"`. default `"public"` |
+| `visibility` | `public` \| `invite_only` \| `organization_only` | no | e.g. `"public"`. default `"public"` |
+| `organizationId` | integer,null | no |  |
 | `coverUrl` | string,null | no |  |
 | `startAt` | string | no | e.g. `"2026-11-02T01:30:00.000Z"` |
 | `endAt` | string | no | e.g. `"2026-11-02T04:00:00.000Z"` |
 | `venueName` | string | no |  |
 | `venueAddress` | string | no |  |
+| `venueMapUrl` | string,null | no |  |
 | `latitude` | number | no | range -90…90 |
 | `longitude` | number | no | range -180…180 |
 | `capacity` | integer | no | range 1…10000. default `100` |
@@ -1336,13 +1436,34 @@ A participant list is personal data. Non-hosts get 403 — it is never public.
 | `401` | Not authenticated | null |
 | `403` | Not authorised | null |
 
+### `GET` `/api/v1/events/{id}/participants/export`
+
+**Export participant list as CSV (host only)**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | CSV file download | — |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
 ### `GET` `/api/v1/events/{id}/pass`
 
 **Own pass, including the code for the QR**
 
 🔒 Requires a bearer token.
 
-Only ever returns the caller's own pass. Cache it on device for offline display.
+Only ever returns the caller's own pass. `passCode` and `qrPayload` are ALWAYS empty here: the code is stored as a SHA-256 hash and cannot be reproduced. Cache them on device from the register response, and POST /events/{id}/register again to rotate to a fresh code if the cache is lost.
 
 **Parameters**
 
@@ -1384,7 +1505,7 @@ Only ever returns the caller's own pass. Cache it on device for offline display.
 
 🔒 Requires a bearer token.
 
-Idempotent: registering twice returns the existing pass. Closes at start + 1h or when capacity is reached.
+Idempotent: registering twice claims no second seat and pays no second reward. It DOES mint a fresh `passCode` while the pass is still `registered`, which is how a reinstall or a second device recovers a QR — the code is stored only as a hash and can never be read back, so rotation is the only recovery. The previous code stops working. A `checked_in` or `no_show` pass is spent and comes back with an empty code. Registration itself closes at start + 1h or when capacity is reached; that window is not re-checked for someone who already holds a pass.
 
 **Parameters**
 
@@ -1448,6 +1569,8 @@ Seven ordered checks (PRD-v2 §6.6.4):
 
 🔒 Requires a bearer token.
 
+The path segment accepts the slug OR the numeric id, so an event reached from a notification payload, a deep link or a pass — all of which carry the id, as every mutation below is keyed by id — can be read back without first resolving a slug. A purely numeric slug is still matched as an id, so do not mint one.
+
 **Parameters**
 
 | Name | In | Required | Type | Notes |
@@ -1472,12 +1595,24 @@ Seven ordered checks (PRD-v2 §6.6.4):
 | `POST` | [`/api/v1/admin/organizations/{id}/review`](#post-api-v1-admin-organizations-id-review) 🔒 | Approve, reject, suspend or reinstate (admin only) |
 | `POST` | [`/api/v1/organizations`](#post-api-v1-organizations) 🔒 | Register an organization |
 | `PATCH` | [`/api/v1/organizations/{id}`](#patch-api-v1-organizations-id) 🔒 | Edit an organization (owner only) |
-| `GET` | [`/api/v1/organizations/{id}/members`](#get-api-v1-organizations-id-members) 🔒 | Roster — any member may read it |
+| `GET` | [`/api/v1/organizations/{id}/analytics`](#get-api-v1-organizations-id-analytics) 🔒 | Cumulative organization carbon footprint analytics (owner only) |
+| `GET` | [`/api/v1/organizations/{id}/members`](#get-api-v1-organizations-id-members) 🔒 | Roster — any member may read it; insights filtered by privacy and role |
 | `POST` | [`/api/v1/organizations/{id}/members`](#post-api-v1-organizations-id-members) 🔒 | Add a member by email (owner only) |
 | `DELETE` | [`/api/v1/organizations/{id}/members/{userId}`](#delete-api-v1-organizations-id-members-userid) 🔒 | Remove another member (owner only) |
+| `GET` | [`/api/v1/organizations/{id}/members/{userId}/answers`](#get-api-v1-organizations-id-members-userid-answers) 🔒 | View a member's custom onboarding answers (owner only) |
+| `GET` | [`/api/v1/organizations/{id}/questions`](#get-api-v1-organizations-id-questions) 🔒 | List custom onboarding questions for an organization |
+| `POST` | [`/api/v1/organizations/{id}/questions`](#post-api-v1-organizations-id-questions) 🔒 | Create a custom onboarding question (owner only) |
+| `DELETE` | [`/api/v1/organizations/{id}/questions/{questionId}`](#delete-api-v1-organizations-id-questions-questionid) 🔒 | Delete (archive) a custom onboarding question (owner only) |
+| `PUT` | [`/api/v1/organizations/{id}/questions/{questionId}`](#put-api-v1-organizations-id-questions-questionid) 🔒 | Update a custom onboarding question (owner only) |
+| `POST` | [`/api/v1/organizations/{id}/questions/reorder`](#post-api-v1-organizations-id-questions-reorder) 🔒 | Reorder custom onboarding questions (owner only) |
 | `POST` | [`/api/v1/organizations/join`](#post-api-v1-organizations-join) 🔒 | Join an organization using its code or slug |
+| `GET` | [`/api/v1/organizations/lookup`](#get-api-v1-organizations-lookup)  | Validate organization code before signup |
 | `GET` | [`/api/v1/organizations/me`](#get-api-v1-organizations-me) 🔒 | The caller's own organization, if any |
+| `POST` | [`/api/v1/organizations/me/code/regenerate`](#post-api-v1-organizations-me-code-regenerate) 🔒 | Regenerate organization 6-digit code (owner only) |
 | `DELETE` | [`/api/v1/organizations/me/membership`](#delete-api-v1-organizations-me-membership) 🔒 | Leave your organization |
+| `PATCH` | [`/api/v1/organizations/me/membership`](#patch-api-v1-organizations-me-membership) 🔒 | Update membership preferences (e.g. carbon footprint privacy sharing) |
+| `GET` | [`/api/v1/organizations/me/onboarding`](#get-api-v1-organizations-me-onboarding) 🔒 | Get custom onboarding questions and current answers for the caller |
+| `POST` | [`/api/v1/organizations/me/onboarding`](#post-api-v1-organizations-me-onboarding) 🔒 | Submit answers for custom onboarding questions |
 
 ### `GET` `/api/v1/admin/organizations`
 
@@ -1558,6 +1693,7 @@ Creates it as `pending` and makes the caller its owner. It stays unusable until 
 | `contactPhone` | string | no |  |
 | `city` | string | no |  |
 | `regionCode` | string | no |  |
+| `verificationDetails` | object | no |  |
 
 **Responses**
 
@@ -1593,7 +1729,8 @@ Creates it as `pending` and makes the caller its owner. It stays unusable until 
 | `contactPhone` | string | no |  |
 | `city` | string | no |  |
 | `regionCode` | string | no |  |
-| `logoUrl` | string,null (uri) | no | e.g. `"https://cdn.ecolife.app/avatars/abc123.webp"` |
+| `verificationDetails` | object | no |  |
+| `logoUrl` | string,null (uri) | no | Any https URL the caller controls, or one returned by POST /uploads/presign.. e.g. `"https://images.unsplash.com/photo-1607346256330-dee7af15f7c5?auto=format&fit=facearea&facepad=3&w=256&h=256&q=70"` |
 
 **Responses**
 
@@ -1606,9 +1743,32 @@ Creates it as `pending` and makes the caller its owner. It stays unusable until 
 | `404` | Not found | null |
 | `409` | Conflict | null |
 
+### `GET` `/api/v1/organizations/{id}/analytics`
+
+**Cumulative organization carbon footprint analytics (owner only)**
+
+🔒 Requires a bearer token.
+
+Aggregated organization-level footprint: total emissions, per-month trend, category breakdown, and average per employee.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Organization Analytics | [`OrganizationAnalytics`](#organizationanalytics) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
 ### `GET` `/api/v1/organizations/{id}/members`
 
-**Roster — any member may read it**
+**Roster — any member may read it; insights filtered by privacy and role**
 
 🔒 Requires a bearer token.
 
@@ -1617,6 +1777,9 @@ Creates it as `pending` and makes the caller its owner. It stays unusable until 
 | Name | In | Required | Type | Notes |
 |---|---|---|---|---|
 | `id` | path | yes | integer | e.g. `42` |
+| `search` | query | no | string | e.g. `"Alice"` |
+| `role` | query | no | `owner` \| `member` | e.g. `"member"` |
+| `onboardingStatus` | query | no | `completed` \| `pending` | e.g. `"completed"` |
 
 **Responses**
 
@@ -1684,6 +1847,166 @@ To remove yourself, use DELETE /organizations/me/membership — the answer diffe
 | `404` | Not found | null |
 | `422` | Domain rule violation | null |
 
+### `GET` `/api/v1/organizations/{id}/members/{userId}/answers`
+
+**View a member's custom onboarding answers (owner only)**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+| `userId` | path | yes | integer | e.g. `7` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Member answers | [`OrgEmployeeAnswers`](#orgemployeeanswers) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+### `GET` `/api/v1/organizations/{id}/questions`
+
+**List custom onboarding questions for an organization**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Questions list | [`OrgOnboardingQuestion`](#orgonboardingquestion)[] |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+### `POST` `/api/v1/organizations/{id}/questions`
+
+**Create a custom onboarding question (owner only)**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required) — [`CreateOrgQuestionBody`](#createorgquestionbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `prompt` | string | yes | e.g. `"What department do you work in?"` |
+| `description` | string | no | e.g. `"Used for team impact reports"` |
+| `type` | [`OrgQuestionType`](#orgquestiontype) | yes |  |
+| `options` | string[] | no |  |
+| `required` | boolean | no | e.g. `false`. default `false` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `201` | Question created | [`OrgOnboardingQuestion`](#orgonboardingquestion) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+### `DELETE` `/api/v1/organizations/{id}/questions/{questionId}`
+
+**Delete (archive) a custom onboarding question (owner only)**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+| `questionId` | path | yes | integer | e.g. `1` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Deleted | object |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+### `PUT` `/api/v1/organizations/{id}/questions/{questionId}`
+
+**Update a custom onboarding question (owner only)**
+
+🔒 Requires a bearer token.
+
+Updating the prompt or type increments the question version so previous answers remain faithful snapshots.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+| `questionId` | path | yes | integer | e.g. `1` |
+
+**Request body** (required) — [`UpdateOrgQuestionBody`](#updateorgquestionbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `prompt` | string | no |  |
+| `description` | string,null | no |  |
+| `type` | [`OrgQuestionType`](#orgquestiontype) | no |  |
+| `options` | array,null | no |  |
+| `required` | boolean | no |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Question updated | [`OrgOnboardingQuestion`](#orgonboardingquestion) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
+### `POST` `/api/v1/organizations/{id}/questions/reorder`
+
+**Reorder custom onboarding questions (owner only)**
+
+🔒 Requires a bearer token.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `id` | path | yes | integer | e.g. `42` |
+
+**Request body** (required) — [`ReorderOrgQuestionsBody`](#reorderorgquestionsbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `questionIds` | integer[] | yes |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Reordered | object |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
 ### `POST` `/api/v1/organizations/join`
 
 **Join an organization using its code or slug**
@@ -1707,6 +2030,29 @@ To remove yourself, use DELETE /organizations/me/membership — the answer diffe
 | `404` | Not found | null |
 | `409` | Conflict | null |
 
+### `GET` `/api/v1/organizations/lookup`
+
+**Validate organization code before signup**
+
+🔓 No authentication.
+
+Public endpoint to check if an organization code exists and is approved to accept members.
+
+**Parameters**
+
+| Name | In | Required | Type | Notes |
+|---|---|---|---|---|
+| `code` | query | yes | string | e.g. `"482910"` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Organization found and active | [`OrganizationLookupResult`](#organizationlookupresult) |
+| `400` | Validation failed | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
+
 ### `GET` `/api/v1/organizations/me`
 
 **The caller's own organization, if any**
@@ -1719,6 +2065,21 @@ To remove yourself, use DELETE /organizations/me/membership — the answer diffe
 |---|---|---|
 | `200` | Own organization, or nulls | [`MyOrganization`](#myorganization) |
 | `401` | Not authenticated | null |
+
+### `POST` `/api/v1/organizations/me/code/regenerate`
+
+**Regenerate organization 6-digit code (owner only)**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | New 6-digit code generated | [`RegenerateCodeResult`](#regeneratecoderesult) |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+| `404` | Not found | null |
 
 ### `DELETE` `/api/v1/organizations/me/membership`
 
@@ -1736,6 +2097,62 @@ Anyone may leave, except the last owner. Members are ADDED by an owner rather th
 | `401` | Not authenticated | null |
 | `403` | Not authorised | null |
 | `422` | Domain rule violation | null |
+
+### `PATCH` `/api/v1/organizations/me/membership`
+
+**Update membership preferences (e.g. carbon footprint privacy sharing)**
+
+🔒 Requires a bearer token.
+
+**Request body** (required) — [`UpdateMembershipPreferencesBody`](#updatemembershippreferencesbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `shareFootprint` | boolean | yes | e.g. `true` |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Preferences updated | [`UpdateMembershipPreferencesResult`](#updatemembershippreferencesresult) |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `403` | Not authorised | null |
+
+### `GET` `/api/v1/organizations/me/onboarding`
+
+**Get custom onboarding questions and current answers for the caller**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Custom onboarding questions and answers | [`OrgOnboardingStatus`](#orgonboardingstatus) |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
+
+### `POST` `/api/v1/organizations/me/onboarding`
+
+**Submit answers for custom onboarding questions**
+
+🔒 Requires a bearer token.
+
+**Request body** (required) — [`SubmitOrgOnboardingAnswersBody`](#submitorgonboardinganswersbody)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `answers` | [`OrgAnswerInput`](#organswerinput)[] | yes |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Answers submitted | object |
+| `400` | Validation failed | null |
+| `401` | Not authenticated | null |
+| `404` | Not found | null |
 
 ---
 
@@ -1873,7 +2290,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 
 ## Schemas
 
-93 named components.
+113 named components.
 
 ### ActiveGoalSummary
 
@@ -2013,12 +2430,14 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `title` | string | yes | e.g. `"Beach clean-up, Versova"` |
 | `description` | string | yes |  |
 | `type` | `plant_drive` \| `cleanup_drive` \| `awareness` \| `recycling_drive` \| `workshop` \| `other` | yes | e.g. `"cleanup_drive"` |
-| `visibility` | `public` \| `invite_only` | no | e.g. `"public"`. default `"public"` |
+| `visibility` | `public` \| `invite_only` \| `organization_only` | no | e.g. `"public"`. default `"public"` |
+| `organizationId` | integer,null | no |  |
 | `coverUrl` | string,null | no |  |
 | `startAt` | string | yes | e.g. `"2026-11-02T01:30:00.000Z"` |
 | `endAt` | string | yes | e.g. `"2026-11-02T04:00:00.000Z"` |
 | `venueName` | string | yes |  |
 | `venueAddress` | string | no |  |
+| `venueMapUrl` | string,null | no |  |
 | `latitude` | number | no | range -90…90 |
 | `longitude` | number | no | range -180…180 |
 | `capacity` | integer | no | range 1…10000. default `100` |
@@ -2046,6 +2465,17 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `contactPhone` | string | no |  |
 | `city` | string | no |  |
 | `regionCode` | string | no |  |
+| `verificationDetails` | object | no |  |
+
+### CreateOrgQuestionBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `prompt` | string | yes | e.g. `"What department do you work in?"` |
+| `description` | string | no | e.g. `"Used for team impact reports"` |
+| `type` | [`OrgQuestionType`](#orgquestiontype) | yes |  |
+| `options` | string[] | no |  |
+| `required` | boolean | no | e.g. `false`. default `false` |
 
 ### DailyAnswers
 
@@ -2083,13 +2513,16 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `description` | string | yes | e.g. `"Gloves and bags provided. Two hours, then chai."` |
 | `type` | `plant_drive` \| `cleanup_drive` \| `awareness` \| `recycling_drive` \| `workshop` \| `other` | yes | e.g. `"cleanup_drive"` |
 | `status` | `draft` \| `published` \| `ongoing` \| `completed` \| `cancelled` | yes | e.g. `"published"` |
-| `visibility` | `public` \| `invite_only` | yes | e.g. `"public"` |
-| `coverUrl` | string,null | yes |  |
+| `visibility` | `public` \| `invite_only` \| `organization_only` | yes | e.g. `"public"` |
+| `organizationId` | integer,null | no | e.g. `42` |
+| `organizationName` | string,null | no | e.g. `"TerraCorp"` |
+| `coverUrl` | string,null | yes | e.g. `"https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=1200&q=80"` |
 | `host` | [`UserSummary`](#usersummary) | yes |  |
 | `startAt` | string | yes | e.g. `"2026-11-02T01:30:00.000Z"` |
 | `endAt` | string | yes | e.g. `"2026-11-02T04:00:00.000Z"` |
 | `venueName` | string | yes | e.g. `"Versova Beach"` |
 | `venueAddress` | string,null | yes | e.g. `"Versova, Andheri West, Mumbai"` |
+| `venueMapUrl` | string,null | no | e.g. `"https://maps.google.com/?q=Versova+Beach"` |
 | `latitude` | number,null | yes | e.g. `19.1351` |
 | `longitude` | number,null | yes | e.g. `72.8126` |
 | `capacity` | integer | yes | e.g. `100` |
@@ -2104,6 +2537,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `passId` | integer | yes | e.g. `77` |
 | `user` | [`UserSummary`](#usersummary) | yes |  |
+| `email` | string | no | e.g. `"attendee@example.com"` |
 | `status` | `registered` \| `checked_in` \| `cancelled` \| `no_show` | yes | e.g. `"registered"` |
 | `registeredAt` | string | yes | e.g. `"2026-10-29T12:00:00.000Z"` |
 | `checkedInAt` | string,null | yes |  |
@@ -2191,6 +2625,14 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `active` | [`Goal`](#goal) \| null | yes |  |
 | `past` | [`Goal`](#goal)[] | yes |  |
+
+### GrowthStage
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `stage` | integer | yes | e.g. `2` |
+| `label` | string | yes | e.g. `"Sapling"` |
+| `imageUrl` | string | yes | e.g. `"https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=1200&q=80"` |
 
 ### HistoryPoint
 
@@ -2320,6 +2762,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `id` | integer | yes | e.g. `12` |
 | `slug` | string | yes | e.g. `"acme-industries"` |
+| `code` | string | yes | e.g. `"482910"` |
 | `name` | string | yes | e.g. `"Acme Industries"` |
 | `type` | `industry` \| `ngo` \| `seller` | yes | e.g. `"industry"` |
 | `status` | `pending` \| `approved` \| `rejected` \| `suspended` | yes | e.g. `"approved"` |
@@ -2487,6 +2930,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `id` | integer | yes | e.g. `7` |
 | `slug` | string | yes | e.g. `"acme-industries"` |
+| `code` | string | yes | e.g. `"482910"` |
 | `name` | string | yes | e.g. `"Acme Industries"` |
 | `type` | `industry` \| `ngo` \| `seller` | yes | Corporate · Community · Seller portal. e.g. `"industry"` |
 | `status` | `pending` \| `approved` \| `rejected` \| `suspended` | yes | e.g. `"pending"` |
@@ -2499,18 +2943,53 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `regionCode` | string,null | yes | e.g. `"IN-MH"` |
 | `memberCount` | integer | yes | e.g. `12` |
 | `reviewNote` | string,null | yes |  |
+| `verificationDetails` | object,null | no |  |
 | `reviewedAt` | string,null | yes |  |
 | `createdAt` | string | yes | e.g. `"2026-11-01T09:00:00.000Z"` |
+
+### OrganizationAnalytics
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `organizationId` | integer | yes |  |
+| `totalFootprintKg` | number | yes | e.g. `1440.6` |
+| `annualProjectedTonnes` | number | yes | e.g. `17.5` |
+| `totalMembers` | integer | yes | e.g. `25` |
+| `activeLoggers` | integer | yes | e.g. `18` |
+| `avgPerEmployeeKg` | number | yes | e.g. `57.6` |
+| `dailyPerCapitaKg` | number | yes | e.g. `5.8` |
+| `urbanBenchmarkDailyKg` | number | yes | e.g. `7.2` |
+| `reductionVsUrbanPct` | number | yes | e.g. `19.4` |
+| `categories` | [`OrgCategoryBreakdown`](#orgcategorybreakdown) | yes |  |
+| `monthlyTrend` | [`OrgMonthlyTrendItem`](#orgmonthlytrenditem)[] | yes |  |
+
+### OrganizationLookupResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `valid` | boolean | yes | e.g. `true` |
+| `name` | string | yes | e.g. `"Acme Industries"` |
+| `type` | `industry` \| `ngo` \| `seller` | yes | Corporate · Community · Seller portal. e.g. `"industry"` |
+| `slug` | string | yes | e.g. `"acme-industries"` |
+| `code` | string | yes | e.g. `"482910"` |
 
 ### OrganizationMember
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `user` | [`UserSummary`](#usersummary) | yes |  |
+| `email` | string (email) | no | e.g. `"colleague@acme.example.com"` |
 | `role` | `owner` \| `member` | yes | e.g. `"owner"` |
 | `joinedAt` | string | yes | e.g. `"2026-11-01T09:00:00.000Z"` |
+| `shareFootprint` | boolean | no | e.g. `true`. default `true` |
+| `onboardingStatus` | `completed` \| `pending` | yes | e.g. `"completed"` |
 | `pointsTotal` | integer | no | e.g. `450` |
+| `currentStreak` | integer | no | e.g. `5` |
 | `baselineTotalKg` | number,null | no | e.g. `6.8` |
+| `last30DaysTotalKg` | number,null | no | e.g. `142.5` |
+| `avgDailyKg` | number,null | no | e.g. `4.75` |
+| `reductionPct` | number,null | no | e.g. `12.5` |
+| `lastActiveAt` | string,null | no | e.g. `"2026-10-31T18:30:00.000Z"` |
 
 ### OrganizationMemberList
 
@@ -2518,6 +2997,87 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `organization` | [`Organization`](#organization) | yes |  |
 | `items` | [`OrganizationMember`](#organizationmember)[] | yes |  |
+
+### OrgAnswerInput
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `questionId` | integer | yes | e.g. `1` |
+| `answer` | unknown | no | e.g. `"Engineering"` |
+
+### OrgAnswerItem
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `10` |
+| `questionId` | integer | yes | e.g. `1` |
+| `questionPrompt` | string | yes | e.g. `"What department do you work in?"` |
+| `questionType` | string | yes | e.g. `"single_choice"` |
+| `questionVersion` | integer | yes | e.g. `1` |
+| `answer` | unknown | no | e.g. `"Engineering"` |
+| `answeredAt` | string | yes | e.g. `"2026-11-01T00:00:00.000Z"` |
+
+### OrgCategoryBreakdown
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `transportKg` | number | yes | e.g. `450.2` |
+| `foodKg` | number | yes | e.g. `320.5` |
+| `homeEnergyKg` | number | yes | e.g. `510` |
+| `waterKg` | number | yes | e.g. `95.8` |
+| `wasteKg` | number | yes | e.g. `64.1` |
+| `transportPct` | number | yes | e.g. `31.3` |
+| `foodPct` | number | yes | e.g. `22.2` |
+| `homeEnergyPct` | number | yes | e.g. `35.4` |
+| `waterPct` | number | yes | e.g. `6.7` |
+| `wastePct` | number | yes | e.g. `4.4` |
+
+### OrgEmployeeAnswers
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `userId` | integer | yes | e.g. `7` |
+| `organizationId` | integer | yes | e.g. `42` |
+| `answers` | [`OrgAnswerItem`](#organsweritem)[] | yes |  |
+
+### OrgMonthlyTrendItem
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `month` | string | yes | e.g. `"2026-10"` |
+| `totalKg` | number | yes | e.g. `1240.5` |
+| `avgPerEmployeeKg` | number | yes | e.g. `62` |
+| `activeLoggers` | integer | yes | e.g. `20` |
+
+### OrgOnboardingQuestion
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `1` |
+| `organizationId` | integer | yes | e.g. `42` |
+| `prompt` | string | yes | e.g. `"What department do you work in?"` |
+| `description` | string,null | no | e.g. `"Used for team impact reports"` |
+| `type` | [`OrgQuestionType`](#orgquestiontype) | yes |  |
+| `options` | array,null | no |  |
+| `required` | boolean | yes | e.g. `true` |
+| `sortOrder` | integer | yes | e.g. `0` |
+| `version` | integer | yes | e.g. `1` |
+| `active` | boolean | yes | e.g. `true` |
+| `createdAt` | string | yes | e.g. `"2026-11-01T00:00:00.000Z"` |
+| `updatedAt` | string | yes | e.g. `"2026-11-01T00:00:00.000Z"` |
+
+### OrgOnboardingStatus
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `organization` | [`Organization`](#organization) | yes |  |
+| `questions` | [`OrgOnboardingQuestion`](#orgonboardingquestion)[] | yes |  |
+| `answers` | [`OrgAnswerItem`](#organsweritem)[] | yes |  |
+| `isCompleted` | boolean | yes | e.g. `true` |
+
+### OrgQuestionType
+
+Enum: `text` · `single_choice` · `multiple_choice` · `number` · `yes_no`
 
 ### OwnProfile
 
@@ -2558,7 +3118,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `uploadUrl` | string | yes | e.g. `"https://storage.example.com/..."` |
-| `publicUrl` | string | yes | e.g. `"https://cdn.ecolife.app/covers/abc123.webp"` |
+| `publicUrl` | string | yes | Where the object will be readable once the PUT to `uploadUrl` succeeds. This is the Neon Object Storage endpoint for the branch, NOT a CDN and NOT cdn.ecolife.app — there is no CDN in front of the bucket today. The host varies per branch, so store the URL this call returns rather than reconstructing it.. e.g. `"https://br-dry-grass-a1og82ui.storage.c-1.ap-southeast-1.aws.neon.tech/uploads/covers/2026/01f7c2e4-6b3a-4f1e-9c80-2a5d8e3b7a11.webp"` |
 | `expiresInSeconds` | integer | yes | e.g. `300` |
 
 ### Product
@@ -2571,7 +3131,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `description` | string,null | yes | e.g. `"Grown without synthetic fertiliser."` |
 | `category` | `plants` \| `household` \| `personal_care` \| `kitchen` \| `stationery` | yes | e.g. `"plants"` |
 | `pricePaise` | integer | yes | Integer paise. Never a float. 24000 = ₹240.00. e.g. `24000` |
-| `imageUrl` | string,null | yes |  |
+| `imageUrl` | string,null | yes | e.g. `"https://images.unsplash.com/photo-1592150621744-aca64f48394a?auto=format&fit=crop&w=800&q=80"` |
 | `stock` | integer | yes | e.g. `34` |
 | `co2SavedKg` | number,null | yes | Why the product exists. Shown on the card.. e.g. `21.9` |
 
@@ -2581,7 +3141,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `name` | string | no |  |
 | `timezone` | string | no | e.g. `"Asia/Kolkata"` |
-| `avatarUrl` | string,null (uri) | no | e.g. `"https://cdn.ecolife.app/avatars/abc123.webp"` |
+| `avatarUrl` | string,null (uri) | no | Any https URL the caller controls, or one returned by POST /uploads/presign.. e.g. `"https://images.unsplash.com/photo-1607346256330-dee7af15f7c5?auto=format&fit=facearea&facepad=3&w=256&h=256&q=70"` |
 | `answers` | [`OnboardingAnswers`](#onboardinganswers) | no |  |
 
 ### PublicProfile
@@ -2609,6 +3169,13 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `refreshToken` | string | no | Mobile sends this. Web sends the httpOnly cookie instead. |
 
+### RegenerateCodeResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `code` | string | yes | e.g. `"719302"` |
+| `organization` | [`Organization`](#organization) | yes |  |
+
 ### Region
 
 | Field | Type | Required | Notes |
@@ -2627,6 +3194,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `password` | string | yes | e.g. `"correct horse battery"` |
 | `phone` | string | no | e.g. `"+919876543210"` |
 | `timezone` | string | no | e.g. `"Asia/Kolkata"`. default `"Asia/Kolkata"` |
+| `organizationCode` | string | no | Optional 6-digit organization code to link user upon signup. e.g. `"482910"` |
 
 ### RegisterResult
 
@@ -2634,6 +3202,12 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `pass` | [`EventPass`](#eventpass) | yes |  |
 | `event` | [`Event`](#event) | yes |  |
+
+### ReorderOrgQuestionsBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `questionIds` | integer[] | yes |  |
 
 ### ResetPasswordBody
 
@@ -2693,7 +3267,7 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 |---|---|---|---|
 | `accessToken` | string | yes | e.g. `"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."` |
 | `accessTokenExpiresIn` | integer | yes | seconds. e.g. `900` |
-| `refreshToken` | string,null | yes | Mobile only. Null for web, where it is an httpOnly cookie. |
+| `refreshToken` | string,null | yes | Non-null ONLY when the request carried `x-ecolife-platform: ios` or `android`. Without that header the caller is treated as a browser: the token is set as an httpOnly cookie and this field is null. It is not a bug — returning a 30-day credential where JS can read it would hand any XSS the whole account. |
 
 ### StoredDailyAnswers
 
@@ -2729,6 +3303,12 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `logDate` | string | yes | The user's LOCAL date. Must be today or yesterday in their timezone.. e.g. `"2026-10-31"` |
 | `answers` | [`DailyAnswers`](#dailyanswers) | yes |  |
 
+### SubmitOrgOnboardingAnswersBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `answers` | [`OrgAnswerInput`](#organswerinput)[] | yes |  |
+
 ### TrackToday
 
 | Field | Type | Required | Notes |
@@ -2738,12 +3318,50 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `askCooling` | boolean | yes | False when the profile reports no cooling. e.g. `true` |
 | `defaults` | unknown | yes |  |
 
+### Tree
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `7` |
+| `slug` | string | yes | e.g. `"neem"` |
+| `name` | string | yes | e.g. `"Neem"` |
+| `description` | string | yes | e.g. `"Azadirachta indica. Shade, medicine and a mosquito deterrent."` |
+| `rarity` | [`TreeRarity`](#treerarity) | yes |  |
+| `imageUrl` | string | yes | e.g. `"https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80"` |
+| `growthStages` | [`GrowthStage`](#growthstage)[] \| null | yes | Null when the tree has one artwork and no progression. |
+| `co2OffsetKgPerYear` | number | yes | Why a tree is the reward and not a sticker.. e.g. `48.5` |
+| `isActive` | boolean | yes | e.g. `true` |
+
+### TreeRarity
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | integer | yes | e.g. `3` |
+| `slug` | string | yes | e.g. `"rare"` |
+| `name` | string | yes | e.g. `"Rare"` |
+| `rank` | integer | yes | 1 is the most common tier; higher is rarer.. e.g. `3` |
+| `dropWeight` | integer | yes | Relative likelihood, not a percentage. Divide by the sum of active tiers.. e.g. `100` |
+| `isActive` | boolean | yes | e.g. `true` |
+
 ### Trip
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `mode` | `walk` \| `cycle` \| `bus` \| `metro_train` \| `two_wheeler` \| `car` \| `cab` \| `auto_rickshaw` \| `work_from_home` | yes | e.g. `"bus"` |
 | `km` | number | yes | e.g. `14.5`. range 0…500 |
+
+### UpdateMembershipPreferencesBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `shareFootprint` | boolean | yes | e.g. `true` |
+
+### UpdateMembershipPreferencesResult
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `updated` | `true` | yes |  |
+| `shareFootprint` | boolean | yes |  |
 
 ### UpdateOrganizationBody
 
@@ -2756,7 +3374,18 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | `contactPhone` | string | no |  |
 | `city` | string | no |  |
 | `regionCode` | string | no |  |
-| `logoUrl` | string,null (uri) | no | e.g. `"https://cdn.ecolife.app/avatars/abc123.webp"` |
+| `verificationDetails` | object | no |  |
+| `logoUrl` | string,null (uri) | no | Any https URL the caller controls, or one returned by POST /uploads/presign.. e.g. `"https://images.unsplash.com/photo-1607346256330-dee7af15f7c5?auto=format&fit=facearea&facepad=3&w=256&h=256&q=70"` |
+
+### UpdateOrgQuestionBody
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `prompt` | string | no |  |
+| `description` | string,null | no |  |
+| `type` | [`OrgQuestionType`](#orgquestiontype) | no |  |
+| `options` | array,null | no |  |
+| `required` | boolean | no |  |
 
 ### UserSummary
 

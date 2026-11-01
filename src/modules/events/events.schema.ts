@@ -17,7 +17,7 @@ export const eventStatusSchema = z
   .openapi({ example: 'published' });
 
 export const eventVisibilitySchema = z
-  .enum(['public', 'invite_only'])
+  .enum(['public', 'invite_only', 'organization_only'])
   .openapi({ example: 'public' });
 
 export const passStatusSchema = z
@@ -33,12 +33,18 @@ export const eventSchema = z
     type: eventTypeSchema,
     status: eventStatusSchema,
     visibility: eventVisibilitySchema,
-    coverUrl: z.string().nullable(),
+    organizationId: z.number().int().nullable().optional().openapi({ example: 42 }),
+    organizationName: z.string().nullable().optional().openapi({ example: 'TerraCorp' }),
+    coverUrl: z.string().nullable().openapi({
+      example:
+        'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=1200&q=80',
+    }),
     host: userSummarySchema,
     startAt: z.string().openapi({ example: '2026-11-02T01:30:00.000Z' }),
     endAt: z.string().openapi({ example: '2026-11-02T04:00:00.000Z' }),
     venueName: z.string().openapi({ example: 'Versova Beach' }),
     venueAddress: z.string().nullable().openapi({ example: 'Versova, Andheri West, Mumbai' }),
+    venueMapUrl: z.string().nullable().optional().openapi({ example: 'https://maps.google.com/?q=Versova+Beach' }),
     latitude: z.number().nullable().openapi({ example: 19.1351 }),
     longitude: z.number().nullable().openapi({ example: 72.8126 }),
     capacity: z.number().int().openapi({ example: 100 }),
@@ -67,6 +73,12 @@ export const eventListQuerySchema = z.object({
     .default('upcoming')
     .openapi({ param: { name: 'filter', in: 'query' } }),
   type: eventTypeSchema.optional().openapi({ param: { name: 'type', in: 'query' } }),
+  search: z.string().optional().openapi({ param: { name: 'search', in: 'query' } }),
+  organizationId: z.coerce
+    .number()
+    .int()
+    .optional()
+    .openapi({ param: { name: 'organizationId', in: 'query' } }),
   lat: z.coerce
     .number()
     .optional()
@@ -104,11 +116,13 @@ export const createEventBodySchema = z
     description: z.string().min(10).max(4000),
     type: eventTypeSchema,
     visibility: eventVisibilitySchema.default('public'),
+    organizationId: z.number().int().positive().nullable().optional(),
     coverUrl: z.string().nullable().optional(),
     startAt: z.string().openapi({ example: '2026-11-02T01:30:00.000Z' }),
     endAt: z.string().openapi({ example: '2026-11-02T04:00:00.000Z' }),
     venueName: z.string().min(2).max(160),
     venueAddress: z.string().max(400).optional(),
+    venueMapUrl: z.string().max(500).nullable().optional(),
     latitude: z.number().min(-90).max(90).optional(),
     longitude: z.number().min(-180).max(180).optional(),
     capacity: z.number().int().min(1).max(10_000).default(100),
@@ -144,6 +158,7 @@ export const participantSchema = z
   .object({
     passId: z.number().int().openapi({ example: 77 }),
     user: userSummarySchema,
+    email: z.string().optional().openapi({ example: 'attendee@example.com' }),
     status: passStatusSchema,
     registeredAt: z.string().openapi({ example: '2026-10-29T12:00:00.000Z' }),
     checkedInAt: z.string().nullable().openapi({ example: null }),

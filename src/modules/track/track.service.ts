@@ -14,7 +14,7 @@ import {
   REWARDS,
   reductionPoints,
 } from '@common/rewards/rewards.ts';
-import { addDays, daysBetween, localDate, localHour } from '@common/time.ts';
+import { addDays, daysBetween, localDate, localHour, zonedIso } from '@common/time.ts';
 import { db } from '@database/client.ts';
 import * as profileRepo from '@modules/profile/profile.repository.ts';
 import * as reference from '@modules/reference/reference.repository.ts';
@@ -108,7 +108,7 @@ export async function today(userId: number) {
       ? {
           id: existing.id,
           answers: answersOfLog(existing),
-          editableUntil: `${addDays(existing.logDate, 1)}T02:00:00`,
+          editableUntil: zonedIso(addDays(existing.logDate, 1), EDIT_CUTOFF_HOUR, user.timezone),
         }
       : null,
     askCooling: profile.coolingUsage !== null && profile.coolingUsage !== 'none',
@@ -248,7 +248,7 @@ export async function submit(userId: number, body: SubmitBody) {
   const computed = computeDailyFootprint(answers, baseline, profile, region);
 
   return db.transaction(async (tx) => {
-    const { row: log, created } = await repo.insertLog(tx, {
+    const { row: log, created } = await insertLogOrConflict(tx, {
       userId,
       logDate: body.logDate,
       clientLogId: body.clientLogId,
@@ -329,7 +329,7 @@ export async function edit(userId: number, logId: number, answersBody: TrackAnsw
     (todayLocal === dayAfter && localHour(user.timezone) < EDIT_CUTOFF_HOUR);
   if (!open) {
     throw new DomainError('TRACK_003', 'This log can no longer be edited.', 403, {
-      editableUntil: `${dayAfter}T02:00:00`,
+      editableUntil: zonedIso(dayAfter, EDIT_CUTOFF_HOUR, user.timezone),
     });
   }
 
@@ -384,6 +384,37 @@ export async function edit(userId: number, logId: number, answersBody: TrackAnsw
       streak,
     };
   });
+}
+
+/**
+ * `daily_log_client_unq` makes a REPLAY idempotent — same clientLogId, same
+ * row back. `daily_log_user_date_unq` is a different event: a *new*
+ * clientLogId claiming a date that already has a log, which is what a second
+ * device or a reinstall that lost its queue sends.
+ *
+ * Unmapped, that constraint surfaced as an unhandled driver error and the
+ * filter turned it into a generic INTERNAL_001 500 — so the client was told
+ * the server broke when in fact its request was answerable. TRACK_001 has
+ * been in docs/error-codes.md as a 409 all along with nothing throwing it.
+ */
+async function insertLogOrConflict(tx: Executor, values: Parameters<typeof repo.insertLog>[1]) {
+  try {
+    return await repo.insertLog(tx, values);
+  } catch (error) {
+    // Assert on the constraint name, not the message: Drizzle wraps driver
+    // errors as `Failed query: …`, and matching that text would let an
+    // unrelated failure be reported as a duplicate date.
+    const constraint = (error as { cause?: { constraint?: string } }).cause?.constraint;
+    if (constraint === 'daily_log_user_date_unq') {
+      throw new DomainError(
+        'TRACK_001',
+        'A log already exists for this date. Edit it instead of submitting again.',
+        409,
+        { logDate: values.logDate },
+      );
+    }
+    throw error;
+  }
 }
 
 /** Replay path: report what the first submit produced, award nothing new. */

@@ -12,6 +12,7 @@ import {
   timestamp,
 } from 'drizzle-orm/pg-core';
 import { eventStatus, eventType, eventVisibility } from './enums.ts';
+import { organizations } from './organizations.ts';
 import { users } from './users.ts';
 
 /**
@@ -43,6 +44,10 @@ export const events = pgTable(
     type: eventType('type').notNull(),
     status: eventStatus('status').notNull().default('draft'),
     visibility: eventVisibility('visibility').notNull().default('public'),
+    organizationId: bigint('organization_id', { mode: 'number' }).references(
+      () => organizations.id,
+      { onDelete: 'set null' },
+    ),
     coverUrl: text('cover_url'),
     hostId: bigint('host_id', { mode: 'number' })
       .notNull()
@@ -51,6 +56,7 @@ export const events = pgTable(
     endAt: timestamp('end_at', { withTimezone: true }).notNull(),
     venueName: text('venue_name').notNull(),
     venueAddress: text('venue_address'),
+    venueMapUrl: text('venue_map_url'),
     latitude: doublePrecision('latitude'),
     longitude: doublePrecision('longitude'),
     capacity: integer('capacity').notNull().default(100),

@@ -16,7 +16,10 @@ export const productSchema = z
     description: z.string().nullable().openapi({ example: 'Grown without synthetic fertiliser.' }),
     category: productCategorySchema,
     pricePaise: moneySchema,
-    imageUrl: z.string().nullable(),
+    imageUrl: z.string().nullable().openapi({
+      example:
+        'https://images.unsplash.com/photo-1592150621744-aca64f48394a?auto=format&fit=crop&w=800&q=80',
+    }),
     stock: z.number().int().openapi({ example: 34 }),
     co2SavedKg: z
       .number()

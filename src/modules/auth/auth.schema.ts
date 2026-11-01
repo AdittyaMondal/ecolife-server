@@ -24,6 +24,13 @@ export const registerBodySchema = z
     password: passwordSchema,
     phone: z.string().min(8).max(20).optional().openapi({ example: '+919876543210' }),
     timezone: z.string().default('Asia/Kolkata').openapi({ example: 'Asia/Kolkata' }),
+    organizationCode: z
+      .string()
+      .trim()
+      .min(6)
+      .max(20)
+      .optional()
+      .openapi({ example: '482910', description: 'Optional 6-digit organization code to link user upon signup' }),
   })
   .openapi('RegisterBody');
 
@@ -43,7 +50,14 @@ export const sessionSchema = z
     refreshToken: z
       .string()
       .nullable()
-      .openapi({ description: 'Mobile only. Null for web, where it is an httpOnly cookie.' }),
+      .openapi({
+        example: null,
+        description:
+          'Non-null ONLY when the request carried `x-ecolife-platform: ios` or `android`. ' +
+          'Without that header the caller is treated as a browser: the token is set as an ' +
+          'httpOnly cookie and this field is null. It is not a bug — returning a 30-day ' +
+          'credential where JS can read it would hand any XSS the whole account.',
+      }),
   })
   .openapi('Session');
 
@@ -74,6 +88,7 @@ export const meSchema = z
         .object({
           id: z.number().int().openapi({ example: 12 }),
           slug: z.string().openapi({ example: 'acme-industries' }),
+          code: z.string().openapi({ example: '482910' }),
           name: z.string().openapi({ example: 'Acme Industries' }),
           type: z.enum(['industry', 'ngo', 'seller']).openapi({ example: 'industry' }),
           status: z

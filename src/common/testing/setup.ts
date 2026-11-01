@@ -90,6 +90,12 @@ afterAll(async () => {
     // Events hosted by a test user cascade, but one created and then left
     // by a since-deleted host would not. Scoped to the title this suite uses.
     await db.execute(sql`delete from events where title like 'Test Drive %'`);
+
+    // Catalogue rows a test created. Trees before rarities: `trees.rarity_id`
+    // is RESTRICT. Both go AFTER the `delete users` above, because `user_trees`
+    // cascades from the account and RESTRICT-references the tree.
+    await db.execute(sql`delete from trees where slug like 'test-%'`);
+    await db.execute(sql`delete from tree_rarities where slug like 'test-%'`);
   } catch (error) {
     // Never fail a green suite on cleanup. Say so loudly instead — silent
     // cleanup failure is how the debris built up unnoticed the first time.

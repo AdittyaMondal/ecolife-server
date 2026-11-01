@@ -2,7 +2,9 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
+  boolean,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -30,6 +32,7 @@ export const organizations = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     slug: text('slug').notNull().unique(),
+    code: text('code').notNull().unique(),
     name: text('name').notNull(),
     type: organizationType('type').notNull(),
     status: organizationStatus('status').notNull().default('pending'),
@@ -46,6 +49,7 @@ export const organizations = pgTable(
     }),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     reviewNote: text('review_note'),
+    verificationDetails: jsonb('verification_details').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -78,6 +82,7 @@ export const organizationMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: orgMemberRole('role').notNull().default('member'),
+    shareFootprint: boolean('share_footprint').notNull().default(true),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

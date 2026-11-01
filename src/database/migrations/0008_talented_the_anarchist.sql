@@ -1,0 +1,1 @@
+ALTER TABLE "organization_members" ADD COLUMN "share_footprint" boolean DEFAULT true NOT NULL;
