@@ -489,13 +489,28 @@ sellerRoutes.openapi(
       200: jsonOk(
         z.object({
           success: z.literal(true),
-          status: z.enum(['placed', 'confirmed', 'shipped', 'delivered', 'cancelled']),
+          status: z
+            .enum(['placed', 'confirmed', 'shipped', 'delivered', 'cancelled'])
+            .openapi({
+              example: 'shipped',
+              description: "The status this seller's own items now carry.",
+            }),
+          orderStatus: z
+            .enum(['placed', 'confirmed', 'shipped', 'delivered', 'cancelled'])
+            .openapi({
+              example: 'confirmed',
+              description:
+                "The whole order, DERIVED from every seller's items: the least advanced live " +
+                'item, or cancelled when all items are. On a multi-seller order this will lag ' +
+                '`status` until the other sellers catch up.',
+            }),
         }),
         'Status updated',
       ),
       401: errorResponses[401],
       403: errorResponses[403],
       404: errorResponses[404],
+      422: errorResponses[422],
     },
   }),
   async (c) =>
