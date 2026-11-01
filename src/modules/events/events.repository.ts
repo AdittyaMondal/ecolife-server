@@ -1,6 +1,13 @@
 import type { Executor } from '@common/rewards/rewards.ts';
 import { db } from '@database/client.ts';
-import { eventHosts, eventPasses, events, users } from '@database/schema/index.ts';
+import {
+  eventHosts,
+  eventPasses,
+  events,
+  organizationMembers,
+  organizations,
+  users,
+} from '@database/schema/index.ts';
 import { and, asc, desc, eq, gte, inArray, lt, lte, ne, type SQL, sql } from 'drizzle-orm';
 
 /** Every Drizzle query for the events module. */
@@ -23,12 +30,14 @@ const EVENT_COLUMNS = {
   type: events.type,
   status: events.status,
   visibility: events.visibility,
+  organizationId: events.organizationId,
   coverUrl: events.coverUrl,
   hostId: events.hostId,
   startAt: events.startAt,
   endAt: events.endAt,
   venueName: events.venueName,
   venueAddress: events.venueAddress,
+  venueMapUrl: events.venueMapUrl,
   latitude: events.latitude,
   longitude: events.longitude,
   capacity: events.capacity,
@@ -61,6 +70,8 @@ export async function listEvents(opts: {
   viewerId: number;
   filter: ListFilter;
   type?: string;
+  search?: string;
+  organizationId?: number;
   lat?: number;
   lng?: number;
   radiusKm: number;
@@ -86,6 +97,11 @@ export async function listEvents(opts: {
     .from(eventHosts)
     .where(eq(eventHosts.userId, opts.viewerId));
 
+  const userOrgIds = db
+    .select({ id: organizationMembers.organizationId })
+    .from(organizationMembers)
+    .where(eq(organizationMembers.userId, opts.viewerId));
+
   const filters: Record<ListFilter, SQL | undefined> = {
     upcoming: and(gte(events.endAt, now), inArray(events.status, ['published', 'ongoing'])),
     nearby: and(
@@ -102,12 +118,14 @@ export async function listEvents(opts: {
     .select({
       ...EVENT_COLUMNS,
       ...HOST,
+      organizationName: organizations.name,
       distanceKm: distance,
       passStatus: eventPasses.status,
       coHostRole: eventHosts.role,
     })
     .from(events)
     .innerJoin(users, eq(users.id, events.hostId))
+    .leftJoin(organizations, eq(organizations.id, events.organizationId))
     .leftJoin(
       eventPasses,
       and(eq(eventPasses.eventId, events.id), eq(eventPasses.userId, opts.viewerId)),
@@ -120,22 +138,37 @@ export async function listEvents(opts: {
       and(
         filters[opts.filter],
         opts.type ? eq(events.type, opts.type as EventRow['type']) : undefined,
+        opts.organizationId ? eq(events.organizationId, opts.organizationId) : undefined,
+        opts.search
+          ? sql`(
+              lower(${events.title}) like ${`%${opts.search.trim().toLowerCase()}%`}
+              or lower(${events.description}) like ${`%${opts.search.trim().toLowerCase()}%`}
+              or lower(coalesce(${events.venueName}, '')) like ${`%${opts.search.trim().toLowerCase()}%`}
+              or lower(coalesce(${organizations.name}, '')) like ${`%${opts.search.trim().toLowerCase()}%`}
+            )`
+          : undefined,
         // Drafts are visible only to the people running them.
         sql`(${events.status} <> 'draft' or ${events.hostId} = ${opts.viewerId})`,
         /**
          * An invite_only event is UNLISTED: it never appears in discovery
          * for anyone who is not running it or already holding a pass.
-         *
-         * That is the whole of what can honestly be enforced today —
-         * there is no invitations table, so "who was invited" is not a
-         * question the schema can answer. Anyone who learns the slug can
-         * still open and join one. See the note on `register`.
          */
         sql`(
           ${events.visibility} <> 'invite_only'
           or ${events.hostId} = ${opts.viewerId}
           or ${events.id} in ${hostingIds}
           or ${events.id} in ${registeredIds}
+        )`,
+        /**
+         * An organization_only event is visible ONLY to members of that organization
+         * or people running / registered for it.
+         */
+        sql`(
+          ${events.visibility} <> 'organization_only'
+          or ${events.hostId} = ${opts.viewerId}
+          or ${events.id} in ${hostingIds}
+          or ${events.id} in ${registeredIds}
+          or (${events.organizationId} is not null and ${events.organizationId} in ${userOrgIds})
         )`,
         opts.afterId !== null ? lt(events.id, opts.afterId) : undefined,
       ),
@@ -151,12 +184,14 @@ export async function findBySlug(slug: string, viewerId: number) {
     .select({
       ...EVENT_COLUMNS,
       ...HOST,
+      organizationName: organizations.name,
       distanceKm: sql<number | null>`null`,
       passStatus: eventPasses.status,
       coHostRole: eventHosts.role,
     })
     .from(events)
     .innerJoin(users, eq(users.id, events.hostId))
+    .leftJoin(organizations, eq(organizations.id, events.organizationId))
     .leftJoin(
       eventPasses,
       and(eq(eventPasses.eventId, events.id), eq(eventPasses.userId, viewerId)),
@@ -171,12 +206,14 @@ export async function findById(id: number, viewerId: number, tx: Executor = db) 
     .select({
       ...EVENT_COLUMNS,
       ...HOST,
+      organizationName: organizations.name,
       distanceKm: sql<number | null>`null`,
       passStatus: eventPasses.status,
       coHostRole: eventHosts.role,
     })
     .from(events)
     .innerJoin(users, eq(users.id, events.hostId))
+    .leftJoin(organizations, eq(organizations.id, events.organizationId))
     .leftJoin(
       eventPasses,
       and(eq(eventPasses.eventId, events.id), eq(eventPasses.userId, viewerId)),
@@ -335,6 +372,7 @@ export function listParticipants(eventId: number) {
       checkedInAt: eventPasses.checkedInAt,
       userId: users.id,
       name: users.name,
+      email: users.email,
       avatarUrl: users.avatarUrl,
       city: users.city,
     })

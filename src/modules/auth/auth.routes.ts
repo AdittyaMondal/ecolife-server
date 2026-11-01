@@ -13,6 +13,7 @@ import {
 } from '@common/middleware/rate-limit.ts';
 import { errorResponses, jsonOk, secured } from '@common/openapi/envelope.ts';
 import { createModule } from '@common/openapi/factory.ts';
+import { platformHeader } from '@common/openapi/params.ts';
 import { env } from '@config/env.ts';
 import { createRoute, type z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
@@ -82,11 +83,16 @@ authRoutes.openapi(
     summary: 'Create an account and start a session',
     description:
       'Rate limited to 10 per 15 minutes per IP and per email. Email verification is ' +
-      'required before any reward can be earned (PRD-v2 §4.4).',
-    request: body(registerBodySchema),
+      'required before any reward can be earned (PRD-v2 §4.4). Send ' +
+      '`x-ecolife-platform: ios|android` to get `session.refreshToken` in the body; ' +
+      'without it you are treated as a browser and the token is set as an httpOnly ' +
+      'cookie with the body field null.',
+    request: { ...body(registerBodySchema), headers: platformHeader },
     responses: {
       201: jsonOk(authResultSchema, 'Account created'),
       400: errorResponses[400],
+      403: errorResponses[403],
+      404: errorResponses[404],
       409: errorResponses[409],
       429: errorResponses[429],
     },
@@ -127,8 +133,10 @@ authRoutes.openapi(
     path: '/login',
     tags: ['auth'],
     summary: 'Exchange credentials for a session',
-    description: 'Failures are deliberately indistinguishable between unknown and wrong-password.',
-    request: body(loginBodySchema),
+    description:
+      'Failures are deliberately indistinguishable between unknown and wrong-password. ' +
+      'Send `x-ecolife-platform: ios|android` to get `session.refreshToken` in the body.',
+    request: { ...body(loginBodySchema), headers: platformHeader },
     responses: {
       200: jsonOk(authResultSchema, 'Signed in'),
       401: errorResponses[401],
@@ -180,7 +188,10 @@ authRoutes.openapi(
     description:
       'Accepts the token from the httpOnly cookie (web) or the body (mobile). Rotates on every ' +
       'use; a replayed token revokes the whole family.',
-    request: { body: { content: { 'application/json': { schema: refreshBodySchema } } } },
+    request: {
+      body: { content: { 'application/json': { schema: refreshBodySchema } } },
+      headers: platformHeader,
+    },
     responses: {
       200: jsonOk(sessionSchema, 'Rotated'),
       401: errorResponses[401],
@@ -274,7 +285,9 @@ authRoutes.openapi(
     const user = c.get('user');
     await consume(`user:${user.id}`, BUCKETS.authStrict);
     const token = await service.resendVerification(user.id);
-    service.deliverEmailToken('verify', String(user.id), token);
+    // null when DEV_AUTO_VERIFY already marked the account verified — there is
+    // no token to send, and logging a link built from a sentinel is noise.
+    if (token) service.deliverEmailToken('verify', `user:${user.id}`, token);
     return ok(c, { message: 'Verification email sent.' }, 200);
   },
 );

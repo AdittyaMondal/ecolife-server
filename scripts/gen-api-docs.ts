@@ -119,7 +119,10 @@ p(
   '',
   '## Before you read this',
   '',
-  '**Every endpoint below is implemented.** All 65 operations run against the real',
+  // Computed, not written out: a hardcoded count in a GENERATED file went stale
+  // the first time a module landed and then contradicted the real figure two
+  // lines above it.
+  `**Every endpoint below is implemented.** All ${opCount} operations run against the real`,
   'database; none returns `GEN_501` any more. Point your client at the server, not',
   'at the mock — the mock serves the *examples* in this document, so it will happily',
   'return a plausible shape for a request the real server would reject.',

@@ -65,9 +65,14 @@ eventRoutes.openapi(
     path: '/{slug}',
     tags: ['events'],
     summary: 'Event detail with viewer-relative state',
+    description:
+      'The path segment accepts the slug OR the numeric id, so an event reached from a ' +
+      'notification payload, a deep link or a pass — all of which carry the id, as every ' +
+      'mutation below is keyed by id — can be read back without first resolving a slug. ' +
+      'A purely numeric slug is still matched as an id, so do not mint one.',
     middleware: [requireUser] as const,
-    security: secured,
     request: { params: slugParam('versova-beach-cleanup') },
+    security: secured,
     responses: {
       200: jsonOk(eventSchema, 'Event'),
       403: errorResponses[403],
@@ -129,8 +134,13 @@ eventRoutes.openapi(
     tags: ['events'],
     summary: 'Register and receive a pass',
     description:
-      'Idempotent: registering twice returns the existing pass. Closes at start + 1h or when ' +
-      'capacity is reached.',
+      'Idempotent: registering twice claims no second seat and pays no second reward. It ' +
+      'DOES mint a fresh `passCode` while the pass is still `registered`, which is how a ' +
+      'reinstall or a second device recovers a QR — the code is stored only as a hash and ' +
+      'can never be read back, so rotation is the only recovery. The previous code stops ' +
+      'working. A `checked_in` or `no_show` pass is spent and comes back with an empty ' +
+      'code. Registration itself closes at start + 1h or when capacity is reached; that ' +
+      'window is not re-checked for someone who already holds a pass.',
     middleware: [requireUser] as const,
     security: secured,
     request: { params: idParam },
@@ -169,7 +179,11 @@ eventRoutes.openapi(
     path: '/{id}/pass',
     tags: ['events'],
     summary: 'Own pass, including the code for the QR',
-    description: "Only ever returns the caller's own pass. Cache it on device for offline display.",
+    description:
+      "Only ever returns the caller's own pass. `passCode` and `qrPayload` are ALWAYS " +
+      'empty here: the code is stored as a SHA-256 hash and cannot be reproduced. Cache ' +
+      'them on device from the register response, and POST /events/{id}/register again to ' +
+      'rotate to a fresh code if the cache is lost.',
     middleware: [requireUser] as const,
     security: secured,
     request: { params: idParam },
@@ -199,6 +213,41 @@ eventRoutes.openapi(
     },
   }),
   async (c) => ok(c, await service.participants(c.get('user').id, c.req.valid('param').id), 200),
+);
+
+eventRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/{id}/participants/export',
+    tags: ['events'],
+    summary: 'Export participant list as CSV (host only)',
+    middleware: [requireUser] as const,
+    security: secured,
+    request: { params: idParam },
+    responses: {
+      200: {
+        description: 'CSV file download',
+        content: {
+          'text/csv': {
+            schema: z.string(),
+          },
+        },
+      },
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
+    },
+  }),
+  async (c) => {
+    const csv = await service.exportParticipantsCsv(
+      c.get('user').id,
+      c.req.valid('param').id,
+    );
+    return c.body(csv, 200, {
+      'Content-Type': 'text/csv; charset=UTF-8',
+      'Content-Disposition': `attachment; filename="event-${c.req.valid('param').id}-participants.csv"`,
+    });
+  },
 );
 
 eventRoutes.openapi(

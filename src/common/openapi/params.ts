@@ -62,3 +62,29 @@ export const dateString = (example: string) =>
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD')
     .openapi({ example });
+
+/**
+ * `x-ecolife-platform` — the one signal that decides how the refresh token is
+ * delivered (PRD-v2 §6.1).
+ *
+ * `ios` / `android` get the token in the response body for expo-secure-store.
+ * Anything else, including a missing header, is treated as a browser and gets
+ * an httpOnly cookie instead, with `session.refreshToken: null` in the body —
+ * returning a 30-day credential to JS would hand any XSS the whole account.
+ *
+ * It is declared here rather than only read in the handler because it was
+ * invisible in the contract: a mobile client that guessed `X-Client: mobile`,
+ * or sent nothing, got `null` and no way to find out why.
+ */
+export const platformHeader = z.object({
+  'x-ecolife-platform': z
+    .enum(['ios', 'android', 'web'])
+    .optional()
+    .openapi({
+      param: { name: 'x-ecolife-platform', in: 'header', required: false },
+      example: 'android',
+      description:
+        'Send ios or android to receive session.refreshToken in the response body. ' +
+        'Omitted or web: the token is set as an httpOnly cookie and the body field is null.',
+    }),
+});

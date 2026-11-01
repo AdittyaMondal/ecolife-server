@@ -2,6 +2,8 @@ import { closeDatabase, db } from '@database/client.ts';
 import { events, orders, rewardTransactions, users } from '@database/schema/index.ts';
 import { inArray, like, sql } from 'drizzle-orm';
 import { seedEvents } from './events.seed.ts';
+import { seedGamification } from './gamification.seed.ts';
+import { seedOrganizations } from './organizations.seed.ts';
 import { seedProducts } from './products.seed.ts';
 import { seedRegions } from './regions.seed.ts';
 import type { Tx } from './support.ts';
@@ -21,6 +23,9 @@ import { seedUsers } from './users.seed.ts';
 
 /** The namespace this seed owns and is therefore allowed to delete. */
 const SEED_EMAIL_PATTERN = '%@ecolife.app';
+
+/** The seeded admin. Reviews every already-decided organization. */
+const ADMIN_EMAIL = 'dev@ecolife.app';
 
 const SEED_EVENT_SLUGS = [
   'terrace-composting-workshop',
@@ -53,17 +58,62 @@ const COUNTED_TABLES = [
   'notifications',
   'push_tokens',
   'audit_logs',
+  'organizations',
+  'organization_members',
+  'organization_onboarding_questions',
+  'organization_onboarding_answers',
+  'tree_rarities',
+  'trees',
 ];
 
 /**
- * Generated per run and never written anywhere.
+ * The shared password for every seeded `@ecolife.app` account.
  *
- * A fixed password would have to live in this file to be logged, and a
- * credential in a tracked file is a credential in the git history. The cost is
- * that reseeding changes the password — read it off the output.
+ * Fixed, by request, because a password that changed on every reseed meant
+ * re-reading the console and re-typing it into two clients and Postman several
+ * times a day.
+ *
+ * This WAS a per-run random value, for a reason worth keeping on the record: a
+ * credential in a tracked file is a credential in the git history. The trade is
+ * accepted here on two conditions, and both are enforced below rather than
+ * remembered:
+ *
+ *   1. It only ever reaches throwaway `@ecolife.app` accounts, which the seed
+ *      owns and recreates on every run.
+ *   2. `assertSeedableBranch()` refuses to run against a protected Neon
+ *      branch, so `123456` cannot land on production. That guard is the whole
+ *      reason this is safe, and `src/database/client.ts` records the time
+ *      `neon init` silently repointed `.env` at production mid-session.
+ *
+ * Do NOT reuse this value for anything a real person signs in with.
  */
-function newDevPassword(): string {
-  return `dev-${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`;
+const DEV_PASSWORD = '123456';
+
+const PROTECTED_BRANCHES = new Set(['production', 'main', 'master']);
+
+/**
+ * Refuses to seed a protected branch.
+ *
+ * The suite has had this guard since the production incident
+ * (`src/common/testing/setup.ts`); the seed never did, which was the larger
+ * hole of the two — it writes 25 accounts with a known password and wipes the
+ * `@ecolife.app` namespace before it does.
+ */
+function assertSeedableBranch(): void {
+  const branch = process.env.NEON_BRANCH;
+  if (
+    branch &&
+    PROTECTED_BRANCHES.has(branch) &&
+    process.env.ALLOW_SEED_ON_PROTECTED_BRANCH !== '1'
+  ) {
+    throw new Error(
+      `Refusing to seed: NEON_BRANCH is "${branch}".\n` +
+        'The seed deletes and recreates every @ecolife.app account and gives them all a ' +
+        'well-known password.\n' +
+        'Point .env at a dev branch, or export ALLOW_SEED_ON_PROTECTED_BRANCH=1 if you ' +
+        'genuinely mean it.',
+    );
+  }
 }
 
 async function wipeSeedWorld(tx: Tx) {
@@ -156,7 +206,9 @@ async function printSummary(seededUserIds: number[]) {
   }
 }
 
-const devPassword = newDevPassword();
+assertSeedableBranch();
+
+const devPassword = DEV_PASSWORD;
 const started = Date.now();
 
 const result = await db.transaction(async (tx) => {
@@ -164,6 +216,7 @@ const result = await db.transaction(async (tx) => {
 
   const regions = await seedRegions(tx);
   const products = await seedProducts(tx);
+  const catalogue = await seedGamification(tx);
 
   // One argon2id hash, shared by all 25 accounts because they share one
   // throwaway password. Hashing it 25 times would cost 25 x ~100 ms to produce
@@ -172,6 +225,13 @@ const result = await db.transaction(async (tx) => {
 
   const userResult = await seedUsers(tx, regions, passwordHash);
   const eventResult = await seedEvents(tx, userResult.seeded);
+
+  // Organizations last of the entity seeders: membership needs the user ids,
+  // and `reviewed_by` needs a real admin so the audit trail is not NULL
+  // (PRD-v2 §6.9).
+  const adminUserId =
+    userResult.seeded.find((u) => u.email.toLowerCase() === ADMIN_EMAIL)?.id ?? null;
+  const orgResult = await seedOrganizations(tx, userResult.seeded, adminUserId);
 
   const ledger = [...userResult.rewards, ...eventResult.rewards];
   await insertAll(ledger, (batch) => tx.insert(rewardTransactions).values(batch));
@@ -198,6 +258,9 @@ const result = await db.transaction(async (tx) => {
   return {
     regions: regions.size,
     products,
+    rarities: catalogue.rarities.size,
+    trees: catalogue.trees.size,
+    ...orgResult,
     ...userResult.counts,
     ...eventResult,
     ledgerRows: ledger.length,
@@ -213,6 +276,11 @@ console.log(
 console.log(
   `  ${result.goals} goals, ${result.ledgerRows} ledger rows, ${result.products} products`,
 );
+console.log(`  ${result.rarities} rarity tiers, ${result.trees} trees in the catalogue`);
+console.log(
+  `  ${result.organizations} organizations (${result.members} memberships), ` +
+    'all types and all four review statuses',
+);
 console.log(`  ${result.events} events, ${result.passes} passes, ${result.regions} regions`);
 
 await printSummary(result.seededIds);
@@ -220,7 +288,16 @@ await printSummary(result.seededIds);
 console.log('\nDev login');
 console.log('  email     dev@ecolife.app  (role: admin)');
 console.log(`  password  ${devPassword}`);
-console.log('  Every seeded @ecolife.app account shares this password. It is generated per run');
-console.log('  and written to no file — rerun `pnpm seed` if you lose it.');
+console.log('  Every seeded @ecolife.app account shares this password, including the');
+console.log('  organization owners and members. Dev branches only — the seed refuses to');
+console.log('  run on production/main/master.');
+console.log('\nSeeded organizations (join code → status)');
+console.log('  900101 GreenCore Industries      industry  approved   (3 members)');
+console.log('  900102 Vanashakti Foundation     ngo       approved   (2 members)');
+console.log('  900103 EarthKind Store           seller    approved   (1 member)');
+console.log('  900104 Nirmal Textiles           industry  pending');
+console.log('  900105 Clean Coast Collective    ngo       pending');
+console.log('  900106 BharatBulk Traders        seller    rejected');
+console.log('  900107 Shakti Cements            industry  suspended');
 
 await closeDatabase();

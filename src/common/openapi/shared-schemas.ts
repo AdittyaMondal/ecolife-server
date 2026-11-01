@@ -53,12 +53,25 @@ export const userSummarySchema = z
  * app's own storage issued. Until there is a bucket to compare against,
  * scheme and length are what can honestly be enforced.
  */
+/**
+ * The example is a real, loadable image on purpose.
+ *
+ * It used to be `https://cdn.ecolife.app/avatars/abc123.webp`, a host that has
+ * never existed. Since the examples in this document ARE the Prism mock the
+ * clients develop against, every avatar rendered against the mock was a
+ * request that timed out — and it was reported as a broken CDN rather than as
+ * a made-up example, because nothing distinguishes the two from outside.
+ */
 export const externalImageUrlSchema = z
   .string()
   .url()
   .max(512)
   .refine((u) => u.startsWith('https://'), { message: 'must be an https URL' })
-  .openapi({ example: 'https://cdn.ecolife.app/avatars/abc123.webp' });
+  .openapi({
+    example:
+      'https://images.unsplash.com/photo-1607346256330-dee7af15f7c5?auto=format&fit=facearea&facepad=3&w=256&h=256&q=70',
+    description: 'Any https URL the caller controls, or one returned by POST /uploads/presign.',
+  });
 
 /**
  * An IANA timezone name, checked against the runtime's own database.

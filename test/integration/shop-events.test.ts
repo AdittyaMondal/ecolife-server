@@ -398,11 +398,16 @@ describe('events', () => {
   );
 
   it(
-    'mints a pass once and returns the same one on re-registration',
+    'keeps one seat on re-registration and rotates the code to a working one',
     async () => {
       const host = await createOnboardedUser();
       const attendee = await createOnboardedUser();
-      const event = await hostAnEvent(host.token);
+      // Starts in five minutes, so the check-in window (start - 1h) is
+      // already open and the rotated code can actually be scanned below.
+      const event = await hostAnEvent(host.token, {
+        startAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+        endAt: new Date(Date.now() + 65 * 60_000).toISOString(),
+      });
 
       const first = (
         await json(
@@ -425,11 +430,39 @@ describe('events', () => {
         )
       ).data;
       expect(second.pass.id).toBe(first.pass.id);
-      // The code is only ever held in plaintext once; a hash is all we keep.
-      expect(second.pass.passCode).toBe('');
 
+      // We keep only a hash, so the ORIGINAL code can never be shown again —
+      // which left a reinstall holding a pass with no QR. Re-registering now
+      // mints a replacement for the owner rather than returning ''.
+      expect(second.pass.passCode.length).toBeGreaterThan(10);
+      expect(second.pass.passCode).not.toBe(first.pass.passCode);
+      expect(second.pass.qrPayload).toBe(`ecolife://pass/${second.pass.passCode}`);
+
+      // Rotation, not duplication: no second seat.
       const [row] = await db.select().from(events).where(eq(events.id, event.id));
       expect(row?.registeredCount).toBe(1);
+
+      // The new code checks in and the old one is dead — that is what makes
+      // this a rotation rather than a second credential.
+      const stale = await call(`/events/${event.id}/scan`, {
+        method: 'POST',
+        headers: auth(host.token),
+        body: JSON.stringify({
+          passCode: first.pass.passCode,
+          scanClientId: crypto.randomUUID(),
+        }),
+      });
+      expect(stale.status).toBe(404);
+
+      const fresh = await call(`/events/${event.id}/scan`, {
+        method: 'POST',
+        headers: auth(host.token),
+        body: JSON.stringify({
+          passCode: second.pass.passCode,
+          scanClientId: crypto.randomUUID(),
+        }),
+      });
+      expect(fresh.status).toBe(200);
     },
     TIMEOUT,
   );

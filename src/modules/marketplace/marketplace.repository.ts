@@ -1,7 +1,7 @@
 import type { Executor } from '@common/rewards/rewards.ts';
 import { db } from '@database/client.ts';
 import { addresses, cartItems, orderItems, orders, products } from '@database/schema/index.ts';
-import { and, asc, desc, eq, ilike, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, lt, or, sql } from 'drizzle-orm';
 
 /** Every Drizzle query for the marketplace and address modules. */
 
@@ -207,6 +207,22 @@ export function listAddresses(userId: number) {
     .from(addresses)
     .where(eq(addresses.userId, userId))
     .orderBy(desc(addresses.isDefault), asc(addresses.id));
+}
+
+/**
+ * The addresses behind a page of orders, in one query.
+ *
+ * The orders list used to serialise `address: null` for every row because
+ * fetching one per order looked like an N+1 — so the client had to refetch
+ * each order by id just to render a delivery line. One `in (...)` is neither
+ * N+1 nor a lie.
+ */
+export async function findAddressesByIds(userId: number, ids: number[]) {
+  if (ids.length === 0) return [];
+  return db
+    .select()
+    .from(addresses)
+    .where(and(eq(addresses.userId, userId), inArray(addresses.id, ids)));
 }
 
 export async function findAddress(userId: number, id: number, tx: Executor = db) {

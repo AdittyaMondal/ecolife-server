@@ -52,6 +52,7 @@ export async function findMembership(userId: number) {
     .select({
       orgId: organizations.id,
       slug: organizations.slug,
+      code: organizations.code,
       name: organizations.name,
       type: organizations.type,
       status: organizations.status,

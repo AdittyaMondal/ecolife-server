@@ -134,7 +134,8 @@
               "string",
               "null"
             ],
-            "description": "Mobile only. Null for web, where it is an httpOnly cookie."
+            "example": null,
+            "description": "Non-null ONLY when the request carried `x-ecolife-platform: ios` or `android`. Without that header the caller is treated as a browser: the token is set as an httpOnly cookie and this field is null. It is not a bug — returning a 30-day credential where JS can read it would hand any XSS the whole account."
           }
         },
         "required": [
@@ -263,6 +264,10 @@
             "type": "string",
             "example": "acme-industries"
           },
+          "code": {
+            "type": "string",
+            "example": "482910"
+          },
           "name": {
             "type": "string",
             "example": "Acme Industries"
@@ -298,6 +303,7 @@
         "required": [
           "id",
           "slug",
+          "code",
           "name",
           "type",
           "status",
@@ -335,6 +341,13 @@
             "type": "string",
             "default": "Asia/Kolkata",
             "example": "Asia/Kolkata"
+          },
+          "organizationCode": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 20,
+            "example": "482910",
+            "description": "Optional 6-digit organization code to link user upon signup"
           }
         },
         "required": [
@@ -987,7 +1000,8 @@
             ],
             "maxLength": 512,
             "format": "uri",
-            "example": "https://cdn.ecolife.app/avatars/abc123.webp"
+            "example": "https://images.unsplash.com/photo-1607346256330-dee7af15f7c5?auto=format&fit=facearea&facepad=3&w=256&h=256&q=70",
+            "description": "Any https URL the caller controls, or one returned by POST /uploads/presign."
           },
           "answers": {
             "$ref": "#/components/schemas/OnboardingAnswers"
@@ -1523,7 +1537,9 @@
                 "$ref": "#/components/schemas/StoredDailyAnswers"
               },
               "editableUntil": {
-                "type": "string"
+                "type": "string",
+                "example": "2026-11-01T02:00:00+05:30",
+                "description": "An ISO-8601 instant WITH offset — 02:00 the day after the log, in the user's own timezone. Parse it as an instant; do not reinterpret the wall time in the device's zone."
               }
             },
             "required": [
@@ -1543,7 +1559,7 @@
                 "$ref": "#/components/schemas/StoredDailyAnswers"
               },
               {
-                "description": "The one-tap \"Same as usual\" prefill, derived from the baseline"
+                "description": "The one-tap \"Same as usual\" prefill, derived from the baseline. `trips` holds the commute as TWO legs of equal distance, not one: onboarding records a one-way distance and a normal day is out and back. Label them as the outbound and return journey rather than collapsing them — editing one leg (worked from home in the afternoon, got a lift back) is the case this shape exists for. A `work_from_home` profile gets an empty array."
               }
             ]
           }
@@ -2135,6 +2151,129 @@
           "onTrack"
         ]
       },
+      "TreeRarity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 3
+          },
+          "slug": {
+            "type": "string",
+            "example": "rare"
+          },
+          "name": {
+            "type": "string",
+            "example": "Rare"
+          },
+          "rank": {
+            "type": "integer",
+            "example": 3,
+            "description": "1 is the most common tier; higher is rarer."
+          },
+          "dropWeight": {
+            "type": "integer",
+            "example": 100,
+            "description": "Relative likelihood, not a percentage. Divide by the sum of active tiers."
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "rank",
+          "dropWeight",
+          "isActive"
+        ]
+      },
+      "Tree": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 7
+          },
+          "slug": {
+            "type": "string",
+            "example": "neem"
+          },
+          "name": {
+            "type": "string",
+            "example": "Neem"
+          },
+          "description": {
+            "type": "string",
+            "example": "Azadirachta indica. Shade, medicine and a mosquito deterrent."
+          },
+          "rarity": {
+            "$ref": "#/components/schemas/TreeRarity"
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80"
+          },
+          "growthStages": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GrowthStage"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the tree has one artwork and no progression."
+          },
+          "co2OffsetKgPerYear": {
+            "type": "number",
+            "example": 48.5,
+            "description": "Why a tree is the reward and not a sticker."
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "description",
+          "rarity",
+          "imageUrl",
+          "growthStages",
+          "co2OffsetKgPerYear",
+          "isActive"
+        ]
+      },
+      "GrowthStage": {
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "integer",
+            "example": 2
+          },
+          "label": {
+            "type": "string",
+            "example": "Sapling"
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=1200&q=80"
+          }
+        },
+        "required": [
+          "stage",
+          "label",
+          "imageUrl"
+        ]
+      },
       "LeaderboardRow": {
         "allOf": [
           {
@@ -2241,7 +2380,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "example": "https://images.unsplash.com/photo-1592150621744-aca64f48394a?auto=format&fit=crop&w=800&q=80"
           },
           "stock": {
             "type": "integer",
@@ -2658,15 +2798,31 @@
             "type": "string",
             "enum": [
               "public",
-              "invite_only"
+              "invite_only",
+              "organization_only"
             ],
             "example": "public"
+          },
+          "organizationId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "example": 42
+          },
+          "organizationName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "TerraCorp"
           },
           "coverUrl": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "example": "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=1200&q=80"
           },
           "host": {
             "$ref": "#/components/schemas/UserSummary"
@@ -2689,6 +2845,13 @@
               "null"
             ],
             "example": "Versova, Andheri West, Mumbai"
+          },
+          "venueMapUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "https://maps.google.com/?q=Versova+Beach"
           },
           "latitude": {
             "type": [
@@ -2820,10 +2983,18 @@
             "type": "string",
             "enum": [
               "public",
-              "invite_only"
+              "invite_only",
+              "organization_only"
             ],
             "default": "public",
             "example": "public"
+          },
+          "organizationId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "exclusiveMinimum": 0
           },
           "coverUrl": {
             "type": [
@@ -2847,6 +3018,13 @@
           "venueAddress": {
             "type": "string",
             "maxLength": 400
+          },
+          "venueMapUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
           },
           "latitude": {
             "type": "number",
@@ -2995,6 +3173,10 @@
           "user": {
             "$ref": "#/components/schemas/UserSummary"
           },
+          "email": {
+            "type": "string",
+            "example": "attendee@example.com"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -3110,6 +3292,10 @@
             "type": "string",
             "example": "acme-industries"
           },
+          "code": {
+            "type": "string",
+            "example": "482910"
+          },
           "name": {
             "type": "string",
             "example": "Acme Industries"
@@ -3193,6 +3379,13 @@
             ],
             "example": null
           },
+          "verificationDetails": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {}
+          },
           "reviewedAt": {
             "type": [
               "string",
@@ -3208,6 +3401,7 @@
         "required": [
           "id",
           "slug",
+          "code",
           "name",
           "type",
           "status",
@@ -3268,6 +3462,10 @@
           "regionCode": {
             "type": "string",
             "maxLength": 10
+          },
+          "verificationDetails": {
+            "type": "object",
+            "additionalProperties": {}
           }
         },
         "required": [
@@ -3344,6 +3542,10 @@
             "type": "string",
             "maxLength": 10
           },
+          "verificationDetails": {
+            "type": "object",
+            "additionalProperties": {}
+          },
           "logoUrl": {
             "type": [
               "string",
@@ -3351,7 +3553,8 @@
             ],
             "maxLength": 512,
             "format": "uri",
-            "example": "https://cdn.ecolife.app/avatars/abc123.webp"
+            "example": "https://images.unsplash.com/photo-1607346256330-dee7af15f7c5?auto=format&fit=facearea&facepad=3&w=256&h=256&q=70",
+            "description": "Any https URL the caller controls, or one returned by POST /uploads/presign."
           }
         }
       },
@@ -3379,6 +3582,11 @@
           "user": {
             "$ref": "#/components/schemas/UserSummary"
           },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "colleague@acme.example.com"
+          },
           "role": {
             "type": "string",
             "enum": [
@@ -3391,9 +3599,26 @@
             "type": "string",
             "example": "2026-11-01T09:00:00.000Z"
           },
+          "shareFootprint": {
+            "type": "boolean",
+            "default": true,
+            "example": true
+          },
+          "onboardingStatus": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "pending"
+            ],
+            "example": "completed"
+          },
           "pointsTotal": {
             "type": "integer",
             "example": 450
+          },
+          "currentStreak": {
+            "type": "integer",
+            "example": 5
           },
           "baselineTotalKg": {
             "type": [
@@ -3401,12 +3626,187 @@
               "null"
             ],
             "example": 6.8
+          },
+          "last30DaysTotalKg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "example": 142.5
+          },
+          "avgDailyKg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "example": 4.75
+          },
+          "reductionPct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "example": 12.5
+          },
+          "lastActiveAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2026-10-31T18:30:00.000Z"
           }
         },
         "required": [
           "user",
           "role",
-          "joinedAt"
+          "joinedAt",
+          "onboardingStatus"
+        ]
+      },
+      "OrganizationAnalytics": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "type": "integer"
+          },
+          "totalFootprintKg": {
+            "type": "number",
+            "example": 1440.6
+          },
+          "annualProjectedTonnes": {
+            "type": "number",
+            "example": 17.5
+          },
+          "totalMembers": {
+            "type": "integer",
+            "example": 25
+          },
+          "activeLoggers": {
+            "type": "integer",
+            "example": 18
+          },
+          "avgPerEmployeeKg": {
+            "type": "number",
+            "example": 57.6
+          },
+          "dailyPerCapitaKg": {
+            "type": "number",
+            "example": 5.8
+          },
+          "urbanBenchmarkDailyKg": {
+            "type": "number",
+            "example": 7.2
+          },
+          "reductionVsUrbanPct": {
+            "type": "number",
+            "example": 19.4
+          },
+          "categories": {
+            "$ref": "#/components/schemas/OrgCategoryBreakdown"
+          },
+          "monthlyTrend": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrgMonthlyTrendItem"
+            }
+          }
+        },
+        "required": [
+          "organizationId",
+          "totalFootprintKg",
+          "annualProjectedTonnes",
+          "totalMembers",
+          "activeLoggers",
+          "avgPerEmployeeKg",
+          "dailyPerCapitaKg",
+          "urbanBenchmarkDailyKg",
+          "reductionVsUrbanPct",
+          "categories",
+          "monthlyTrend"
+        ]
+      },
+      "OrgCategoryBreakdown": {
+        "type": "object",
+        "properties": {
+          "transportKg": {
+            "type": "number",
+            "example": 450.2
+          },
+          "foodKg": {
+            "type": "number",
+            "example": 320.5
+          },
+          "homeEnergyKg": {
+            "type": "number",
+            "example": 510
+          },
+          "waterKg": {
+            "type": "number",
+            "example": 95.8
+          },
+          "wasteKg": {
+            "type": "number",
+            "example": 64.1
+          },
+          "transportPct": {
+            "type": "number",
+            "example": 31.3
+          },
+          "foodPct": {
+            "type": "number",
+            "example": 22.2
+          },
+          "homeEnergyPct": {
+            "type": "number",
+            "example": 35.4
+          },
+          "waterPct": {
+            "type": "number",
+            "example": 6.7
+          },
+          "wastePct": {
+            "type": "number",
+            "example": 4.4
+          }
+        },
+        "required": [
+          "transportKg",
+          "foodKg",
+          "homeEnergyKg",
+          "waterKg",
+          "wasteKg",
+          "transportPct",
+          "foodPct",
+          "homeEnergyPct",
+          "waterPct",
+          "wastePct"
+        ]
+      },
+      "OrgMonthlyTrendItem": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "example": "2026-10"
+          },
+          "totalKg": {
+            "type": "number",
+            "example": 1240.5
+          },
+          "avgPerEmployeeKg": {
+            "type": "number",
+            "example": 62
+          },
+          "activeLoggers": {
+            "type": "integer",
+            "example": 20
+          }
+        },
+        "required": [
+          "month",
+          "totalKg",
+          "avgPerEmployeeKg",
+          "activeLoggers"
         ]
       },
       "AddOrganizationMemberBody": {
@@ -3444,6 +3844,92 @@
         },
         "required": [
           "left"
+        ]
+      },
+      "UpdateMembershipPreferencesResult": {
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "shareFootprint": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "updated",
+          "shareFootprint"
+        ]
+      },
+      "UpdateMembershipPreferencesBody": {
+        "type": "object",
+        "properties": {
+          "shareFootprint": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "shareFootprint"
+        ]
+      },
+      "OrganizationLookupResult": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "example": true
+          },
+          "name": {
+            "type": "string",
+            "example": "Acme Industries"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "industry",
+              "ngo",
+              "seller"
+            ],
+            "example": "industry",
+            "description": "Corporate · Community · Seller portal"
+          },
+          "slug": {
+            "type": "string",
+            "example": "acme-industries"
+          },
+          "code": {
+            "type": "string",
+            "example": "482910"
+          }
+        },
+        "required": [
+          "valid",
+          "name",
+          "type",
+          "slug",
+          "code"
+        ]
+      },
+      "RegenerateCodeResult": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 6,
+            "example": "719302"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/Organization"
+          }
+        },
+        "required": [
+          "code",
+          "organization"
         ]
       },
       "JoinOrganizationResult": {
@@ -3486,6 +3972,313 @@
         },
         "required": [
           "code"
+        ]
+      },
+      "OrgOnboardingQuestion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "organizationId": {
+            "type": "integer",
+            "example": 42
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "example": "What department do you work in?"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "Used for team impact reports"
+          },
+          "type": {
+            "$ref": "#/components/schemas/OrgQuestionType"
+          },
+          "options": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "Engineering",
+              "Sales",
+              "Design"
+            ]
+          },
+          "required": {
+            "type": "boolean",
+            "example": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "example": 0
+          },
+          "version": {
+            "type": "integer",
+            "example": 1
+          },
+          "active": {
+            "type": "boolean",
+            "example": true
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-01T00:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-01T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "prompt",
+          "type",
+          "required",
+          "sortOrder",
+          "version",
+          "active",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "OrgQuestionType": {
+        "type": "string",
+        "enum": [
+          "text",
+          "single_choice",
+          "multiple_choice",
+          "number",
+          "yes_no"
+        ]
+      },
+      "CreateOrgQuestionBody": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "example": "What department do you work in?"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "example": "Used for team impact reports"
+          },
+          "type": {
+            "$ref": "#/components/schemas/OrgQuestionType"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "example": [
+              "Engineering",
+              "Sales",
+              "Design"
+            ]
+          },
+          "required": {
+            "type": "boolean",
+            "default": false,
+            "example": false
+          }
+        },
+        "required": [
+          "prompt",
+          "type"
+        ]
+      },
+      "UpdateOrgQuestionBody": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
+          },
+          "type": {
+            "$ref": "#/components/schemas/OrgQuestionType"
+          },
+          "options": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ReorderOrgQuestionsBody": {
+        "type": "object",
+        "properties": {
+          "questionIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "example": [
+              3,
+              1,
+              2
+            ]
+          }
+        },
+        "required": [
+          "questionIds"
+        ]
+      },
+      "OrgOnboardingStatus": {
+        "type": "object",
+        "properties": {
+          "organization": {
+            "$ref": "#/components/schemas/Organization"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrgOnboardingQuestion"
+            }
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrgAnswerItem"
+            }
+          },
+          "isCompleted": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "organization",
+          "questions",
+          "answers",
+          "isCompleted"
+        ]
+      },
+      "OrgAnswerItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 10
+          },
+          "questionId": {
+            "type": "integer",
+            "example": 1
+          },
+          "questionPrompt": {
+            "type": "string",
+            "example": "What department do you work in?"
+          },
+          "questionType": {
+            "type": "string",
+            "example": "single_choice"
+          },
+          "questionVersion": {
+            "type": "integer",
+            "example": 1
+          },
+          "answer": {
+            "example": "Engineering"
+          },
+          "answeredAt": {
+            "type": "string",
+            "example": "2026-11-01T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "questionId",
+          "questionPrompt",
+          "questionType",
+          "questionVersion",
+          "answeredAt"
+        ]
+      },
+      "SubmitOrgOnboardingAnswersBody": {
+        "type": "object",
+        "properties": {
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrgAnswerInput"
+            }
+          }
+        },
+        "required": [
+          "answers"
+        ]
+      },
+      "OrgAnswerInput": {
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": "integer",
+            "example": 1
+          },
+          "answer": {
+            "example": "Engineering"
+          }
+        },
+        "required": [
+          "questionId"
+        ]
+      },
+      "OrgEmployeeAnswers": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "integer",
+            "example": 7
+          },
+          "organizationId": {
+            "type": "integer",
+            "example": 42
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrgAnswerItem"
+            }
+          }
+        },
+        "required": [
+          "userId",
+          "organizationId",
+          "answers"
         ]
       },
       "ReviewOrganizationBody": {
@@ -3603,7 +4396,8 @@
           },
           "publicUrl": {
             "type": "string",
-            "example": "https://cdn.ecolife.app/covers/abc123.webp"
+            "example": "https://br-dry-grass-a1og82ui.storage.c-1.ap-southeast-1.aws.neon.tech/uploads/covers/2026/01f7c2e4-6b3a-4f1e-9c80-2a5d8e3b7a11.webp",
+            "description": "Where the object will be readable once the PUT to `uploadUrl` succeeds. This is the Neon Object Storage endpoint for the branch, NOT a CDN and NOT cdn.ecolife.app — there is no CDN in front of the bucket today. The host varies per branch, so store the URL this call returns rather than reconstructing it."
           },
           "expiresInSeconds": {
             "type": "integer",
@@ -3857,7 +4651,25 @@
           "auth"
         ],
         "summary": "Create an account and start a session",
-        "description": "Rate limited to 10 per 15 minutes per IP and per email. Email verification is required before any reward can be earned (PRD-v2 §4.4).",
+        "description": "Rate limited to 10 per 15 minutes per IP and per email. Email verification is required before any reward can be earned (PRD-v2 §4.4). Send `x-ecolife-platform: ios|android` to get `session.refreshToken` in the body; without it you are treated as a browser and the token is set as an httpOnly cookie with the body field null.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ios",
+                "android",
+                "web"
+              ],
+              "example": "android",
+              "description": "Send ios or android to receive session.refreshToken in the response body. Omitted or web: the token is set as an httpOnly cookie and the body field is null."
+            },
+            "required": false,
+            "description": "Send ios or android to receive session.refreshToken in the response body. Omitted or web: the token is set as an httpOnly cookie and the body field is null.",
+            "name": "x-ecolife-platform",
+            "in": "header"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -3908,6 +4720,26 @@
               }
             }
           },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict",
             "content": {
@@ -3937,7 +4769,25 @@
           "auth"
         ],
         "summary": "Exchange credentials for a session",
-        "description": "Failures are deliberately indistinguishable between unknown and wrong-password.",
+        "description": "Failures are deliberately indistinguishable between unknown and wrong-password. Send `x-ecolife-platform: ios|android` to get `session.refreshToken` in the body.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ios",
+                "android",
+                "web"
+              ],
+              "example": "android",
+              "description": "Send ios or android to receive session.refreshToken in the response body. Omitted or web: the token is set as an httpOnly cookie and the body field is null."
+            },
+            "required": false,
+            "description": "Send ios or android to receive session.refreshToken in the response body. Omitted or web: the token is set as an httpOnly cookie and the body field is null.",
+            "name": "x-ecolife-platform",
+            "in": "header"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -4008,6 +4858,24 @@
         ],
         "summary": "Rotate the refresh token",
         "description": "Accepts the token from the httpOnly cookie (web) or the body (mobile). Rotates on every use; a replayed token revokes the whole family.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ios",
+                "android",
+                "web"
+              ],
+              "example": "android",
+              "description": "Send ios or android to receive session.refreshToken in the response body. Omitted or web: the token is set as an httpOnly cookie and the body field is null."
+            },
+            "required": false,
+            "description": "Send ios or android to receive session.refreshToken in the response body. Omitted or web: the token is set as an httpOnly cookie and the body field is null.",
+            "name": "x-ecolife-platform",
+            "in": "header"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5144,7 +6012,7 @@
           "track"
         ],
         "summary": "Submit the daily log — the core loop",
-        "description": "One transaction: validate, compute 5 categories, upsert the footprint, update the streak, evaluate the active goal, award rewards. Idempotent on (user, clientLogId), so an offline queue can replay safely. The response carries everything the result sheet needs — no refetch required.",
+        "description": "One transaction: validate, compute 5 categories, upsert the footprint, update the streak, evaluate the active goal, award rewards. Idempotent on (user, clientLogId), so an offline queue can replay safely. The response carries everything the result sheet needs — no refetch required. Replaying the SAME clientLogId returns the first result and awards nothing twice; a DIFFERENT clientLogId for a date that is already logged is TRACK_001 (409) — edit that log instead.",
         "security": [
           {
             "bearerAuth": []
@@ -5202,6 +6070,16 @@
           },
           "401": {
             "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -5864,6 +6742,214 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/trees/rarities": {
+      "get": {
+        "tags": [
+          "gamification"
+        ],
+        "summary": "Rarity tiers and their drop weights — public",
+        "description": "Weights are relative, not percentages: divide one by the sum of the active tiers. Published deliberately — the roll is server-side, so the odds cost nothing to disclose.",
+        "responses": {
+          "200": {
+            "description": "Rarity tiers, rarest last",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/TreeRarity"
+                          }
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/trees": {
+      "get": {
+        "tags": [
+          "gamification"
+        ],
+        "summary": "The tree catalogue — public",
+        "description": "Every tree a user can be rewarded with. `rarity` filters by rarity slug; an unknown slug is an empty page rather than a 404, so a stale filter does not look like an outage.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "rare"
+            },
+            "required": false,
+            "name": "rarity",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Catalogue, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Tree"
+                          }
+                        },
+                        "pageInfo": {
+                          "$ref": "#/components/schemas/PageInfo"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "pageInfo"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/trees/{slug}": {
+      "get": {
+        "tags": [
+          "gamification"
+        ],
+        "summary": "One catalogue entry — public",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "example": "neem"
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Tree"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
                 }
               }
             }
@@ -6636,7 +7722,7 @@
           "marketplace"
         ],
         "summary": "Place an order",
-        "description": "One transaction: decrement stock, insert the order with price snapshots, debit coins through the ledger. Replaying the same idempotencyKey returns the original order rather than charging twice.",
+        "description": "One transaction: decrement stock, insert the order with price snapshots, debit coins through the ledger. Replaying the same idempotencyKey returns the original order rather than charging twice — and returns it with its `address`, exactly as the first call did.\n\nTHERE IS NO PAYMENT STEP, and this is the design, not an omission: PRD-v2 §6.5 says \"No real-money payment in v2\". Coins buy a DISCOUNT (capped at MAX_DISCOUNT_PCT of the subtotal); the remaining `totalPaise` is settled offline and fulfilment is manual. The order therefore goes straight to `placed` with no payment-method field, no gateway redirect and no webhook to wait for. Clients should present it as \"order placed, pay on delivery\", never as \"paid\".",
         "security": [
           {
             "bearerAuth": []
@@ -6739,6 +7825,7 @@
           "marketplace"
         ],
         "summary": "Own orders",
+        "description": "Each row carries its full `address`, so a list does not have to be followed by one GET per order to render a delivery line.",
         "security": [
           {
             "bearerAuth": []
@@ -7292,6 +8379,25 @@
           },
           {
             "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "required": false,
+            "name": "organizationId",
+            "in": "query"
+          },
+          {
+            "schema": {
               "type": [
                 "number",
                 "null"
@@ -7499,6 +8605,7 @@
           "events"
         ],
         "summary": "Event detail with viewer-relative state",
+        "description": "The path segment accepts the slug OR the numeric id, so an event reached from a notification payload, a deep link or a pass — all of which carry the id, as every mutation below is keyed by id — can be read back without first resolving a slug. A purely numeric slug is still matched as an id, so do not mint one.",
         "security": [
           {
             "bearerAuth": []
@@ -7625,10 +8732,18 @@
                     "type": "string",
                     "enum": [
                       "public",
-                      "invite_only"
+                      "invite_only",
+                      "organization_only"
                     ],
                     "default": "public",
                     "example": "public"
+                  },
+                  "organizationId": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "exclusiveMinimum": 0
                   },
                   "coverUrl": {
                     "type": [
@@ -7652,6 +8767,13 @@
                   "venueAddress": {
                     "type": "string",
                     "maxLength": 400
+                  },
+                  "venueMapUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
                   },
                   "latitude": {
                     "type": "number",
@@ -7824,7 +8946,7 @@
           "events"
         ],
         "summary": "Register and receive a pass",
-        "description": "Idempotent: registering twice returns the existing pass. Closes at start + 1h or when capacity is reached.",
+        "description": "Idempotent: registering twice claims no second seat and pays no second reward. It DOES mint a fresh `passCode` while the pass is still `registered`, which is how a reinstall or a second device recovers a QR — the code is stored only as a hash and can never be read back, so rotation is the only recovery. The previous code stops working. A `checked_in` or `no_show` pass is spent and comes back with an empty code. Registration itself closes at start + 1h or when capacity is reached; that window is not re-checked for someone who already holds a pass.",
         "security": [
           {
             "bearerAuth": []
@@ -8006,7 +9128,7 @@
           "events"
         ],
         "summary": "Own pass, including the code for the QR",
-        "description": "Only ever returns the caller's own pass. Cache it on device for offline display.",
+        "description": "Only ever returns the caller's own pass. `passCode` and `qrPayload` are ALWAYS empty here: the code is stored as a SHA-256 hash and cannot be reproduced. Cache them on device from the register response, and POST /events/{id}/register again to rotate to a fresh code if the cache is lost.",
         "security": [
           {
             "bearerAuth": []
@@ -8143,6 +9265,73 @@
           },
           "403": {
             "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/events/{id}/participants/export": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "Export participant list as CSV (host only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV file download",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -8835,7 +10024,7 @@
         "tags": [
           "organizations"
         ],
-        "summary": "Roster — any member may read it",
+        "summary": "Roster — any member may read it; insights filtered by privacy and role",
         "security": [
           {
             "bearerAuth": []
@@ -8851,6 +10040,41 @@
             "required": true,
             "name": "id",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "Alice"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "owner",
+                "member"
+              ],
+              "example": "member"
+            },
+            "required": false,
+            "name": "role",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "completed",
+                "pending"
+              ],
+              "example": "completed"
+            },
+            "required": false,
+            "name": "onboardingStatus",
+            "in": "query"
           }
         ],
         "responses": {
@@ -9020,6 +10244,93 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{id}/analytics": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Cumulative organization carbon footprint analytics (owner only)",
+        "description": "Aggregated organization-level footprint: total emissions, per-month trend, category breakdown, and average per employee.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organization Analytics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrganizationAnalytics"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -9211,6 +10522,245 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Update membership preferences (e.g. carbon footprint privacy sharing)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMembershipPreferencesBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preferences updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UpdateMembershipPreferencesResult"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/lookup": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Validate organization code before signup",
+        "description": "Public endpoint to check if an organization code exists and is approved to accept members.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "example": "482910"
+            },
+            "required": true,
+            "name": "code",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organization found and active",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrganizationLookupResult"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/me/code/regenerate": {
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Regenerate organization 6-digit code (owner only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "New 6-digit code generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/RegenerateCodeResult"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/organizations/join": {
@@ -9306,6 +10856,790 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{id}/questions": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "List custom onboarding questions for an organization",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Questions list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/OrgOnboardingQuestion"
+                      }
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Create a custom onboarding question (owner only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrgQuestionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Question created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrgOnboardingQuestion"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{id}/questions/{questionId}": {
+      "put": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Update a custom onboarding question (owner only)",
+        "description": "Updating the prompt or type increments the question version so previous answers remain faithful snapshots.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 1
+            },
+            "required": true,
+            "name": "questionId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrgQuestionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Question updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrgOnboardingQuestion"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Delete (archive) a custom onboarding question (owner only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 1
+            },
+            "required": true,
+            "name": "questionId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean",
+                          "example": true
+                        }
+                      },
+                      "required": [
+                        "ok"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{id}/questions/reorder": {
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Reorder custom onboarding questions (owner only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderOrgQuestionsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reordered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean",
+                          "example": true
+                        }
+                      },
+                      "required": [
+                        "ok"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/me/onboarding": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Get custom onboarding questions and current answers for the caller",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Custom onboarding questions and answers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrgOnboardingStatus"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Submit answers for custom onboarding questions",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitOrgOnboardingAnswersBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Answers submitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean",
+                          "example": true
+                        },
+                        "count": {
+                          "type": "integer",
+                          "example": 3
+                        }
+                      },
+                      "required": [
+                        "ok",
+                        "count"
+                      ]
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{id}/members/{userId}/answers": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "View a member's custom onboarding answers (owner only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 42
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "example": 7
+            },
+            "required": true,
+            "name": "userId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Member answers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrgEmployeeAnswers"
+                    },
+                    "error": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
             "content": {
               "application/json": {
                 "schema": {

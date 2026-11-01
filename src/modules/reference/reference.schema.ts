@@ -59,7 +59,16 @@ export const presignBodySchema = z
 export const presignResultSchema = z
   .object({
     uploadUrl: z.string().openapi({ example: 'https://storage.example.com/...' }),
-    publicUrl: z.string().openapi({ example: 'https://cdn.ecolife.app/covers/abc123.webp' }),
+    publicUrl: z.string().openapi({
+      example:
+        'https://br-dry-grass-a1og82ui.storage.c-1.ap-southeast-1.aws.neon.tech/uploads/' +
+        'covers/2026/01f7c2e4-6b3a-4f1e-9c80-2a5d8e3b7a11.webp',
+      description:
+        'Where the object will be readable once the PUT to `uploadUrl` succeeds. This is ' +
+        'the Neon Object Storage endpoint for the branch, NOT a CDN and NOT cdn.ecolife.app ' +
+        '— there is no CDN in front of the bucket today. The host varies per branch, so ' +
+        'store the URL this call returns rather than reconstructing it.',
+    }),
     expiresInSeconds: z.number().int().openapi({ example: 300 }),
   })
   .openapi('PresignResult');

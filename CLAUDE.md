@@ -37,6 +37,12 @@ Markers used in PRD-v2:
 - `[CHANGE]` — deliberate divergence from v1.
 - `[DEFERRED]` — explicitly out of scope. The 2D farm game is the big one: **do not build any
   part of it.** PRD-v2 §12 names the only three hooks v2 owes it.
+  > **Amended 1 Nov 2026, by the repo owner.** The *collection layer* — the tree catalogue,
+  > rarity tiers, badges, the task→reward rule engine and the user's forest — is now IN v2 as
+  > the `gamification` module, and PRD-v2 §12 was rewritten to say so. The **game itself**
+  > stays deferred: no plots, no skins, no shop, no trading, no `game_*` table. If you are
+  > reading §12 in an older checkout and about to delete `src/modules/gamification/` as scope
+  > creep — don't. It is deliberate.
 - `[LESSON]` — a decision taken *because* v1's audit found the opposite approach broken. These
   are not optional and not up for redesign.
 
@@ -51,20 +57,21 @@ What exists:
 
 - Env config, zod-validated, fails fast at boot
 - Drizzle client on the **pooled** endpoint; migrator on the **direct** endpoint
-- **21 tables**, migrations `0000`–`0004` applied, with the `[LESSON]` invariants enforced
+- **28 tables**, migrations `0000`–`0010` applied, with the `[LESSON]` invariants enforced
   by the database rather than by a service remembering (see §4.3)
 - `OpenAPIHono` app with request-id, logging, secure headers, CORS
 - Response envelope, typed `DomainError`, error and not-found filters
-- **The full API contract** — 55 paths, zod request/response schemas with realistic
+- **The full API contract** — 69 paths, zod request/response schemas with realistic
   examples, generated to a committed `openapi.json`
 - `docs/error-codes.md` — the code registry both clients branch on
 - `docs/api-reference.md`, `docs/overview.md`, `docs/enums.md`
 - The carbon engine: baseline AND daily, `src/common/carbon/`
 - The reward ledger, `src/common/rewards/` — every earn and spend goes through `award()`
 - Neon Object Storage, `src/common/storage/`
-- **All eleven modules**: health, auth, profile, track, goals, leaderboard, home,
-  marketplace, events, reference, organizations
-- A seed (`pnpm seed`) producing 25 users, 1,440 footprints, 24 products, 6 events
+- **All twelve modules**: health, auth, profile, track, goals, leaderboard, home,
+  marketplace, events, reference, organizations, gamification
+- A seed (`pnpm seed`) producing 25 users, 1,440 footprints, 24 products, 6 events,
+  5 rarity tiers and a 20-tree catalogue
 - **206 tests**, including the money path, the QR check-in flow and the anti-farming rules
 
 **What does not exist:** `src/jobs/` and `src/ws/` are still empty — no scheduler, no
@@ -85,6 +92,16 @@ Known gaps, written down rather than discovered later:
   verify. Settlement is one-shot and there is no pending-rewards concept.
 - `contentType` on an upload is a client claim. Magic-byte verification after upload
   is still owed (PRD-v2 §6.7), and the bucket is `public_read`.
+- **No mail is ever sent.** `SMTP_URL` and `MAIL_FROM` are declared in `env.ts` and read
+  by nothing; `deliverEmailToken` logs the links outside production and does nothing in
+  it. Because PRD-v2 §4.4 gates every reward on a verified address, a PRODUCTION account
+  can therefore never earn — it never receives the link. Until a provider is chosen, a
+  non-production deployment must set `DEV_AUTO_VERIFY=true` or its users will all sit at
+  zero points. Choosing the provider is a product decision, not a code one.
+- An event `passCode` is stored only as a SHA-256 hash, so `GET /events/{id}/pass` can
+  never return it — the field is always `''` there. `POST /events/{id}/register` rotates
+  to a fresh code for the owner while the pass is still `registered`; that is the only
+  recovery for a reinstall, and it invalidates the previous QR.
 
 The database is live, migrated and seeded. **Tests share it with the app** by deliberate
 choice, and sweep the `@example.test` / `@example.com` / `@ecolife.invalid` namespaces
@@ -167,6 +184,27 @@ Error codes are `DOMAIN_NNN` and every one is registered in `docs/error-codes.md
 
 **Never leak an internal error message or stack to the client.** Anything that is not a
 `DomainError` becomes a generic `INTERNAL_001` 500, and the real error is logged server-side.
+
+### 4.1.0 Answers the clients kept having to ask for
+
+Four questions came back from the mobile client on 1 Nov 2026 that the contract should
+have answered on its own. They are settled; do not re-litigate them in code review.
+
+- **`session.refreshToken` is null unless you ask for it.** The signal is
+  `x-ecolife-platform: ios|android`, now declared on `/auth/register`, `/auth/login` and
+  `/auth/refresh`. A browser gets an httpOnly cookie and `null` in the body, because
+  returning a 30-day credential where JS can read it hands any XSS the whole account.
+  `X-Client` is not a header this server reads.
+- **There is no payment step, by design.** PRD-v2 §6.5: "No real-money payment in v2."
+  Coins buy a discount; the rest is settled offline and fulfilment is manual. Do not add
+  a payment-method field to `orders` to make the flow "look complete".
+- **`cdn.ecolife.app` does not exist and never did.** It was an OpenAPI `example`. Since
+  §4.0 makes the examples the Prism mock, a fake host there is a broken image in every
+  client that renders against the mock — which is exactly how it was reported. Every
+  image example now points at a URL that was checked to return 200.
+- **Timestamps that name a wall time carry an offset.** `editableUntil` used to be
+  `2026-11-02T02:00:00`, which a client parses in its own zone. Use `zonedIso` from
+  `@common/time.ts` for anything of this shape.
 
 ### 4.1.1 Never trust a client-supplied IP
 
@@ -320,6 +358,17 @@ Hard-won; do not rediscover them.
   module singleton shared across every test file in a `bun test` process. A per-file
   `afterAll` closes it while a sibling file is still querying. Teardown lives in
   `src/common/testing/setup.ts`, preloaded via `bunfig.toml`.
+- **There are four Neon branches, and `.env` must point at YOUR dev one.** `production`
+  (default), `dev-adittya`, `dev-yusuf`, `dev-jenin`. On 1 Nov 2026 `.env` was found pointing at
+  `production` with `ALLOW_TESTS_ON_PROTECTED_BRANCH=1` set, so the suite and `pnpm seed` had
+  been writing to it — exactly the incident `src/database/client.ts` records. `.env.example`
+  already documents the convention (`neon env pull --branch dev-<yourname>`); it just was not
+  followed. `pnpm seed` now refuses a protected branch of its own accord, and the seeded
+  password is the fixed, well-known `123456` — which is only safe BECAUSE of that guard. Check
+  `NEON_BRANCH` before running anything that writes.
+- **A dev branch may be empty.** `dev-adittya` had zero tables, so repointing `.env` needs
+  `pnpm migration:apply` and `pnpm seed` before anything works. Branching does not always carry
+  the parent's schema.
 - **`neon init` / `neon deploy` rewrite `.env` with NEON's naming, not ours.** They
   write `DATABASE_URL` = **pooled** and `DATABASE_URL_UNPOOLED` = direct, which is the exact
   inverse of §4.2. Left alone, migrations then run through PgBouncer. After any `neon` command

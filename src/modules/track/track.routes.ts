@@ -42,7 +42,9 @@ trackRoutes.openapi(
       'One transaction: validate, compute 5 categories, upsert the footprint, update the ' +
       'streak, evaluate the active goal, award rewards. Idempotent on (user, clientLogId), ' +
       'so an offline queue can replay safely. The response carries everything the result ' +
-      'sheet needs — no refetch required.',
+      'sheet needs — no refetch required. Replaying the SAME clientLogId returns the ' +
+      'first result and awards nothing twice; a DIFFERENT clientLogId for a date that is ' +
+      'already logged is TRACK_001 (409) — edit that log instead.',
     middleware: [requireUser] as const,
     security: secured,
     request: {
@@ -52,6 +54,7 @@ trackRoutes.openapi(
       200: jsonOk(logResultSchema, 'Footprint computed and rewards granted'),
       400: errorResponses[400],
       401: errorResponses[401],
+      409: errorResponses[409],
       422: errorResponses[422],
       429: errorResponses[429],
     },

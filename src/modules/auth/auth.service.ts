@@ -11,6 +11,8 @@ import { DomainError } from '@common/errors/domain-error.ts';
 import { award, REWARDS } from '@common/rewards/rewards.ts';
 import { env } from '@config/env.ts';
 import { db } from '@database/client.ts';
+import { users } from '@database/schema/index.ts';
+import * as orgRepo from '@modules/organizations/organizations.repository.ts';
 import * as profileRepo from '@modules/profile/profile.repository.ts';
 import * as repo from './auth.repository.ts';
 
@@ -76,6 +78,7 @@ export function publicUser(
       ? {
           id: membership.orgId,
           slug: membership.slug,
+          code: membership.code,
           name: membership.name,
           type: membership.type,
           status: membership.status,
@@ -86,7 +89,14 @@ export function publicUser(
 }
 
 export async function register(
-  input: { name: string; email: string; password: string; phone?: string; timezone: string },
+  input: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    timezone: string;
+    organizationCode?: string;
+  },
   meta: Meta,
 ) {
   if (await repo.findUserByEmail(input.email)) {
@@ -95,16 +105,53 @@ export async function register(
     throw new DomainError('AUTH_005', 'That email is already registered.', 409);
   }
 
-  const isDev = env.NODE_ENV === 'development';
-  const created = await repo.createUser({
-    name: input.name,
-    email: input.email,
-    passwordHash: await hashPassword(input.password),
-    phone: input.phone,
-    timezone: input.timezone,
-    emailVerifiedAt: isDev ? new Date() : undefined,
+  let orgToJoin: Awaited<ReturnType<typeof orgRepo.findByCode>> = null;
+  if (input.organizationCode) {
+    const cleanCode = input.organizationCode.trim();
+    if (cleanCode.length !== 6 || !/^\d{6}$/.test(cleanCode)) {
+      throw new DomainError('ORG_007', 'Organization code must be exactly 6 digits.', 400);
+    }
+    orgToJoin = await orgRepo.findByCode(cleanCode);
+    if (!orgToJoin) {
+      throw new DomainError('ORG_007', 'No organization found with that code.', 404);
+    }
+    if (orgToJoin.status !== 'approved') {
+      throw new DomainError(
+        'ORG_002',
+        `This organization is ${orgToJoin.status}. Only approved organizations can accept members.`,
+        403,
+        { status: orgToJoin.status },
+      );
+    }
+  }
+
+  const passwordHash = await hashPassword(input.password);
+
+  const created = await db.transaction(async (tx) => {
+    const [user] = await tx
+      .insert(users)
+      .values({
+        name: input.name,
+        email: input.email.toLowerCase(),
+        passwordHash,
+        phone: input.phone,
+        timezone: input.timezone,
+        emailVerifiedAt: autoVerifyEnabled() ? new Date() : undefined,
+      })
+      .returning();
+
+    if (!user) throw new DomainError('INTERNAL_001', 'Could not create the account.', 500);
+
+    if (orgToJoin) {
+      await orgRepo.insertMember(tx, {
+        organizationId: orgToJoin.id,
+        userId: user.id,
+        role: 'member',
+      });
+    }
+
+    return user;
   });
-  if (!created) throw new DomainError('INTERNAL_001', 'Could not create the account.', 500);
 
   const verification = await issueEmailToken(created.id, 'verify');
   const payload = await sessionPayload(created.id, meta);
@@ -169,6 +216,20 @@ export async function me(userId: number) {
   return publicUser(user, membership, state);
 }
 
+/**
+ * Whether new accounts skip verification entirely.
+ *
+ * Fail CLOSED, on BOTH conditions: neither a stray env var nor a mis-set
+ * NODE_ENV alone can turn self-verification on. `register` used to test
+ * `NODE_ENV === 'development'` by itself, which is the same fail-open shape
+ * that was removed from `resendVerification` — and this project really did
+ * run a deployed server with NODE_ENV=development, where it would have
+ * verified every account that signed up.
+ */
+function autoVerifyEnabled(): boolean {
+  return env.NODE_ENV !== 'production' && env.DEV_AUTO_VERIFY;
+}
+
 /** Mints a single-use token, stores only its hash, returns the plaintext once. */
 async function issueEmailToken(userId: number, purpose: 'verify' | 'reset') {
   const token = mintRefreshToken();
@@ -224,12 +285,11 @@ export async function resendVerification(userId: number) {
   const user = await repo.findUserById(userId);
   if (!user) throw new DomainError('AUTH_001', 'Account not found.', 401);
   if (user.emailVerifiedAt) throw new DomainError('AUTH_008', 'Already verified.', 409);
-  // Fail CLOSED. Both conditions, so neither a stray env var nor a
-  // mis-set NODE_ENV alone can turn self-verification on.
-  if (env.NODE_ENV !== 'production' && env.DEV_AUTO_VERIFY) {
+  if (autoVerifyEnabled()) {
     await repo.markEmailVerified(user.id);
     await grantWithheldOnboardingReward(user.id);
-    return 'dev-auto-verified';
+    // Nothing to deliver: the account is already verified.
+    return null;
   }
   return issueEmailToken(user.id, 'verify');
 }
@@ -254,8 +314,39 @@ export async function resetPassword(token: string, password: string) {
   await revokeAllSessions(row.userId);
 }
 
-/** Dev-only: no SMTP is wired, so the link is logged instead of sent. */
-export function deliverEmailToken(purpose: string, email: string, token: string) {
+/**
+ * The two links a verification or reset mail has to contain.
+ *
+ * `web` is what a desktop recipient clicks; `mobile` is the deep link the app
+ * registers so the same mail works on a phone. Both carry the token as a
+ * query parameter named `token`, which is what
+ * `ecolife-web/src/app/(auth)/verify-email` and `/reset` already read.
+ */
+export function emailLinks(purpose: 'verify' | 'reset', token: string) {
+  const path = purpose === 'verify' ? 'verify-email' : 'reset';
+  const origin = env.APP_ORIGIN[0] ?? '';
+  const query = `token=${encodeURIComponent(token)}`;
+  return {
+    web: origin ? `${origin.replace(/\/+$/, '')}/${path}?${query}` : null,
+    mobile: `${env.MOBILE_SCHEME}://${path}?${query}`,
+  };
+}
+
+/**
+ * NO MAIL IS SENT. There is no SMTP client in this repo and `SMTP_URL` is
+ * declared but unread, so outside production this logs the links and in
+ * production it does nothing at all.
+ *
+ * That is a real hole, not a stylistic one: PRD-v2 §4.4 gates every reward on
+ * a verified address, so a production account that never receives the mail
+ * can never earn — the leaderboard and the coin discount are dead for it.
+ * Until a provider is chosen, a non-production deployment should set
+ * DEV_AUTO_VERIFY=true so clients can be developed against a live server.
+ */
+export function deliverEmailToken(purpose: 'verify' | 'reset', email: string, token: string) {
   if (env.NODE_ENV === 'production') return;
-  console.log(`[email:${purpose}] ${email} -> token=${token}`);
+  const links = emailLinks(purpose, token);
+  console.log(
+    `[email:${purpose}] ${email}\n  web    ${links.web ?? '(APP_ORIGIN unset)'}\n  mobile ${links.mobile}`,
+  );
 }

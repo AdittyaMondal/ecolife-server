@@ -130,7 +130,11 @@ export const eventStatus = pgEnum('event_status', [
   'cancelled',
 ]);
 
-export const eventVisibility = pgEnum('event_visibility', ['public', 'invite_only']);
+export const eventVisibility = pgEnum('event_visibility', [
+  'public',
+  'invite_only',
+  'organization_only',
+]);
 
 export const eventRole = pgEnum('event_role', ['host', 'co_host']);
 

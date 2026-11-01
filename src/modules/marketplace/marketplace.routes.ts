@@ -178,7 +178,14 @@ marketplaceRoutes.openapi(
     description:
       'One transaction: decrement stock, insert the order with price snapshots, debit coins ' +
       'through the ledger. Replaying the same idempotencyKey returns the original order ' +
-      'rather than charging twice.',
+      'rather than charging twice — and returns it with its `address`, exactly as the ' +
+      'first call did.\n\n' +
+      'THERE IS NO PAYMENT STEP, and this is the design, not an omission: PRD-v2 §6.5 ' +
+      'says "No real-money payment in v2". Coins buy a DISCOUNT (capped at ' +
+      'MAX_DISCOUNT_PCT of the subtotal); the remaining `totalPaise` is settled offline ' +
+      'and fulfilment is manual. The order therefore goes straight to `placed` with no ' +
+      'payment-method field, no gateway redirect and no webhook to wait for. Clients ' +
+      'should present it as "order placed, pay on delivery", never as "paid".',
     middleware: [requireUser] as const,
     security: secured,
     request: {
@@ -202,6 +209,9 @@ marketplaceRoutes.openapi(
     path: '/orders',
     tags: ['marketplace'],
     summary: 'Own orders',
+    description:
+      'Each row carries its full `address`, so a list does not have to be followed by one ' +
+      'GET per order to render a delivery line.',
     middleware: [requireUser] as const,
     security: secured,
     request: { query: cursorQuery },
