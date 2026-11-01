@@ -212,7 +212,7 @@ Failures are deliberately indistinguishable between unknown and wrong-password. 
 
 🔓 No authentication.
 
-Accepts the token from the httpOnly cookie (web) or the body (mobile). Rotates on every use; a replayed token revokes the whole family.
+Accepts the token from the httpOnly cookie (web) or the body (mobile). Rotates on every use; a replayed token revokes the whole family. A 409 (AUTH_009) means another context refreshed the same token moments ago — the session is alive, so RETRY rather than signing the user out. Two browser tabs reach this routinely.
 
 **Parameters**
 
@@ -232,6 +232,7 @@ Accepts the token from the httpOnly cookie (web) or the body (mobile). Rotates o
 |---|---|---|
 | `200` | Rotated | [`Session`](#session) |
 | `401` | Not authenticated | null |
+| `409` | Conflict | null |
 
 ### `POST` `/api/v1/auth/register`
 

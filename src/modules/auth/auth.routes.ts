@@ -187,7 +187,9 @@ authRoutes.openapi(
     summary: 'Rotate the refresh token',
     description:
       'Accepts the token from the httpOnly cookie (web) or the body (mobile). Rotates on every ' +
-      'use; a replayed token revokes the whole family.',
+      'use; a replayed token revokes the whole family. A 409 (AUTH_009) means another context ' +
+      'refreshed the same token moments ago — the session is alive, so RETRY rather than ' +
+      'signing the user out. Two browser tabs reach this routinely.',
     request: {
       body: { content: { 'application/json': { schema: refreshBodySchema } } },
       headers: platformHeader,
@@ -195,6 +197,7 @@ authRoutes.openapi(
     responses: {
       200: jsonOk(sessionSchema, 'Rotated'),
       401: errorResponses[401],
+      409: errorResponses[409],
     },
   }),
   async (c) => {

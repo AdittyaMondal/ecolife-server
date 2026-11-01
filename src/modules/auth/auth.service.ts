@@ -177,6 +177,18 @@ export async function login(email: string, password: string, meta: Meta) {
 export async function refresh(presented: string, meta: Meta) {
   const result = await rotateSession(presented, meta);
   if (!result.ok) {
+    /**
+     * `raced` is NOT a sign-out. Another context refreshed the same cookie
+     * moments ago — two browser tabs, or one under React StrictMode — and the
+     * session is perfectly alive. 409 rather than 401 so a client cannot
+     * mistake it for "your session ended": the caller should retry, by which
+     * point the winner's cookie is in place.
+     */
+    if (result.reason === 'raced') {
+      throw new DomainError('AUTH_009', 'Another request refreshed this session. Try again.', 409, {
+        reason: result.reason,
+      });
+    }
     const message =
       result.reason === 'reused'
         ? 'That session was already used elsewhere. Everyone has been signed out.'

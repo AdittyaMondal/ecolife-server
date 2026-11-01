@@ -37,6 +37,7 @@ into the client repos' copy of this file.
 | `AUTH_006` | 403 | Admin only. |
 | `AUTH_007` | 422 | Verification or reset link invalid, already used, or expired. |
 | `AUTH_008` | 409 | Already verified — nothing to resend. |
+| `AUTH_009` | 409 | Another request rotated this refresh token moments ago — two browser tabs, or one React StrictMode double-invoke. **Not a sign-out:** the session is alive. Retry the refresh; the winner's cookie is already in place. Only a replay from OUTSIDE the 10-second grace window is treated as theft and answers `AUTH_003`. |
 
 ## Onboarding
 
