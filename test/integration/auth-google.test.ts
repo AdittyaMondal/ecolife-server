@@ -3,7 +3,7 @@ import { verifyPassword } from '@common/auth/password.ts';
 import { freshIpHeaders } from '@common/testing/client-ip.ts';
 import { env } from '@config/env.ts';
 import { db } from '@database/client.ts';
-import { users } from '@database/schema/index.ts';
+import { organizationMembers, organizations, users } from '@database/schema/index.ts';
 import { eq, sql } from 'drizzle-orm';
 import { app } from '../../src/app.ts';
 
@@ -291,6 +291,67 @@ describe('POST /auth/google — returning user', () => {
         body: JSON.stringify({ refreshToken: rotated }),
       });
       expect(after.status).toBe(401);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'drops an organization membership the squatter attached',
+    async () => {
+      const email = addr();
+      const reg = await call('/auth/register', {
+        method: 'POST',
+        headers: { 'x-ecolife-platform': 'ios' },
+        body: JSON.stringify({
+          name: 'Squatter',
+          email,
+          password: 'correct horse battery staple',
+          timezone: 'UTC',
+        }),
+      });
+      expect(reg.status).toBe(201);
+      const userId = (await json(reg)).data.user.id as number;
+      await db.update(users).set({ emailVerifiedAt: null }).where(eq(users.id, userId)).execute();
+
+      /**
+       * The squatter joins their own organization before the victim ever signs
+       * in. Without the scrub the victim silently becomes a member, and
+       * shareFootprint hands that organization their footprint data.
+       */
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          slug: `test-squat-${crypto.randomUUID().slice(0, 8)}`,
+          code: String(900800 + Math.floor(Math.random() * 99)),
+          name: `Test Squat ${crypto.randomUUID().slice(0, 8)}`,
+          type: 'industry',
+          status: 'approved',
+        })
+        .returning();
+      if (!org) throw new Error('could not create the probe organization');
+      await db
+        .insert(organizationMembers)
+        .values({ organizationId: org.id, userId, role: 'member' })
+        .execute();
+
+      stubGoogle(good(email));
+      expect(
+        (
+          await googleIn(
+            { accessToken: 'ya29.stub', timezone: 'UTC' },
+            { 'x-ecolife-platform': 'ios' },
+          )
+        ).status,
+      ).toBe(200);
+      globalThis.fetch = realFetch;
+
+      const left = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(organizationMembers)
+        .where(eq(organizationMembers.userId, userId));
+      expect(left[0]?.n).toBe(0);
+
+      await db.delete(organizations).where(eq(organizations.id, org.id)).execute();
     },
     TIMEOUT,
   );

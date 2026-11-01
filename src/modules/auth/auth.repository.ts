@@ -1,10 +1,13 @@
 import { db } from '@database/client.ts';
 import {
+  addresses,
+  cartItems,
   emailTokens,
   lifestyleProfiles,
   notifications,
   organizationMembers,
   organizations,
+  pushTokens,
   users,
 } from '@database/schema/index.ts';
 import { and, eq, isNull, sql } from 'drizzle-orm';
@@ -85,6 +88,41 @@ export async function revokePendingEmailTokens(userId: number) {
     .set({ usedAt: new Date() })
     .where(and(eq(emailTokens.userId, userId), isNull(emailTokens.usedAt)))
     .execute();
+}
+
+/**
+ * Drops state a stranger could have attached to an unverified account.
+ *
+ * Used only by the Google-sign-in takeover. An unverified row never proved who
+ * owns the address, so anything RELATIONAL on it is of unknown provenance —
+ * and two kinds of it have real consequences for the person inheriting the
+ * row:
+ *
+ *   organization_members  the squatter's organization would silently gain a
+ *                         member and, through shareFootprint, visibility of
+ *                         the real owner's footprint data
+ *   addresses             a saved default address means the next order ships
+ *                         to the squatter
+ *   cart_items            a pre-loaded cart the owner did not choose
+ *   push_tokens           notifications meant for the owner, delivered to the
+ *                         squatter's device
+ *
+ * The cut line, for whoever adds the next user-owned table: drop it here if a
+ * stranger setting it would expose the owner's data or redirect something
+ * physical. Carbon history (daily_logs, daily_footprints, goals) and the
+ * lifestyle profile are deliberately KEPT — they are the account's own data,
+ * harmless to inherit, and discarding them would wipe the common case of
+ * someone who simply registered and never clicked the verify link.
+ *
+ * Reaches across module boundaries (§4.4) for the same reason
+ * `profile.repository.anonymise` does: deleting or re-owning an account is one
+ * operation over every table that hangs off it, not several.
+ */
+export async function scrubUnprovenState(userId: number) {
+  await db.delete(organizationMembers).where(eq(organizationMembers.userId, userId)).execute();
+  await db.delete(addresses).where(eq(addresses.userId, userId)).execute();
+  await db.delete(cartItems).where(eq(cartItems.userId, userId)).execute();
+  await db.delete(pushTokens).where(eq(pushTokens.userId, userId)).execute();
 }
 
 export async function setPassword(userId: number, passwordHash: string) {

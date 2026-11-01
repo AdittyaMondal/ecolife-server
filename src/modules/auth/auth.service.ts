@@ -230,6 +230,14 @@ export async function googleSignIn(accessToken: string, timezone: string, meta: 
     await repo.setPassword(existing.id, await unusablePasswordHash());
     await revokeAllSessions(existing.id);
     await repo.revokePendingEmailTokens(existing.id);
+    /**
+     * Credentials were not the only thing the squatter could plant. An
+     * organization membership would hand their org visibility of the real
+     * owner's footprint; a saved address would ship the owner's next order to
+     * them. See `scrubUnprovenState` for the full list and the rule for
+     * extending it.
+     */
+    await repo.scrubUnprovenState(existing.id);
     await repo.markEmailVerified(existing.id);
     return sessionPayload(existing.id, meta);
   }
