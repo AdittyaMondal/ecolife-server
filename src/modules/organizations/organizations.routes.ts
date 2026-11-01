@@ -1,5 +1,6 @@
 import { requireAdmin, requireUser } from '@common/guards/auth.guard.ts';
 import { ok } from '@common/interceptors/response-envelope.ts';
+import { BUCKETS, rateLimitByIp } from '@common/middleware/rate-limit.ts';
 import { errorResponses, jsonOk, secured } from '@common/openapi/envelope.ts';
 import { createModule } from '@common/openapi/factory.ts';
 import { idParam, paginated } from '@common/openapi/params.ts';
@@ -296,12 +297,14 @@ organizationRoutes.openapi(
     summary: 'Validate organization code before signup',
     description:
       'Public endpoint to check if an organization code exists and is approved to accept members.',
+    middleware: [rateLimitByIp(BUCKETS.search)] as const,
     request: { query: lookupQuerySchema },
     responses: {
       200: jsonOk(lookupResultSchema, 'Organization found and active'),
       400: errorResponses[400],
       403: errorResponses[403],
       404: errorResponses[404],
+      429: errorResponses[429],
     },
   }),
   async (c) => ok(c, await service.lookupByCode(c.req.valid('query').code), 200),
