@@ -1,3 +1,4 @@
+import type { Executor } from '@common/rewards/rewards.ts';
 import { env } from '@config/env.ts';
 import { db } from '@database/client.ts';
 import { sessions } from '@database/schema/index.ts';
@@ -198,8 +199,8 @@ export async function revokeSession(presented: string): Promise<void> {
 }
 
 /** Sign out everywhere. Used on password reset and on a role change. */
-export async function revokeAllSessions(userId: number): Promise<void> {
-  await db
+export async function revokeAllSessions(userId: number, tx: Executor = db): Promise<void> {
+  await tx
     .update(sessions)
     .set({ revokedAt: new Date() })
     .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))

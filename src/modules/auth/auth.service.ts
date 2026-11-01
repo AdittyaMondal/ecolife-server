@@ -227,18 +227,32 @@ export async function googleSignIn(accessToken: string, timezone: string, meta: 
      * would let anyone lock a victim out of Google sign-in forever just by
      * registering their address first.
      */
-    await repo.setPassword(existing.id, await unusablePasswordHash());
-    await revokeAllSessions(existing.id);
-    await repo.revokePendingEmailTokens(existing.id);
+    // Hash outside the transaction: argon2id takes ~100ms and holding a
+    // connection for it serves nobody.
+    const replacement = await unusablePasswordHash();
+
     /**
-     * Credentials were not the only thing the squatter could plant. An
-     * organization membership would hand their org visibility of the real
-     * owner's footprint; a saved address would ship the owner's next order to
-     * them. See `scrubUnprovenState` for the full list and the rule for
-     * extending it.
+     * ONE transaction. A takeover that half-applied would be worse than one
+     * that failed: a password rotated while the squatter's sessions are still
+     * live, or state scrubbed while the email stays unverified so the real
+     * owner cannot earn (§4.4). Either the account changes hands completely or
+     * it does not change hands at all.
      */
-    await repo.scrubUnprovenState(existing.id);
-    await repo.markEmailVerified(existing.id);
+    await db.transaction(async (tx) => {
+      await repo.setPassword(existing.id, replacement, tx);
+      await revokeAllSessions(existing.id, tx);
+      await repo.revokePendingEmailTokens(existing.id, tx);
+      /**
+       * Credentials were not the only thing the squatter could plant. An
+       * organization membership would hand their org visibility of the real
+       * owner's footprint; a saved address would ship the owner's next order
+       * to them. See `scrubUnprovenState` for the full list and the rule for
+       * extending it.
+       */
+      await repo.scrubUnprovenState(existing.id, tx);
+      await repo.markEmailVerified(existing.id, tx);
+    });
+
     return sessionPayload(existing.id, meta);
   }
 

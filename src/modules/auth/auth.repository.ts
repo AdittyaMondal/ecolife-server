@@ -1,3 +1,4 @@
+import type { Executor } from '@common/rewards/rewards.ts';
 import { db } from '@database/client.ts';
 import {
   addresses,
@@ -72,8 +73,8 @@ export async function findMembership(userId: number) {
   return row ?? null;
 }
 
-export async function markEmailVerified(userId: number) {
-  await db.update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, userId)).execute();
+export async function markEmailVerified(userId: number, tx: Executor = db) {
+  await tx.update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, userId)).execute();
 }
 
 /**
@@ -82,8 +83,8 @@ export async function markEmailVerified(userId: number) {
  * Needed when an account changes hands: a pending reset link in an attacker's
  * inbox would otherwise still work after the real owner took the account over.
  */
-export async function revokePendingEmailTokens(userId: number) {
-  await db
+export async function revokePendingEmailTokens(userId: number, tx: Executor = db) {
+  await tx
     .update(emailTokens)
     .set({ usedAt: new Date() })
     .where(and(eq(emailTokens.userId, userId), isNull(emailTokens.usedAt)))
@@ -118,15 +119,15 @@ export async function revokePendingEmailTokens(userId: number) {
  * `profile.repository.anonymise` does: deleting or re-owning an account is one
  * operation over every table that hangs off it, not several.
  */
-export async function scrubUnprovenState(userId: number) {
-  await db.delete(organizationMembers).where(eq(organizationMembers.userId, userId)).execute();
-  await db.delete(addresses).where(eq(addresses.userId, userId)).execute();
-  await db.delete(cartItems).where(eq(cartItems.userId, userId)).execute();
-  await db.delete(pushTokens).where(eq(pushTokens.userId, userId)).execute();
+export async function scrubUnprovenState(userId: number, tx: Executor = db) {
+  await tx.delete(organizationMembers).where(eq(organizationMembers.userId, userId)).execute();
+  await tx.delete(addresses).where(eq(addresses.userId, userId)).execute();
+  await tx.delete(cartItems).where(eq(cartItems.userId, userId)).execute();
+  await tx.delete(pushTokens).where(eq(pushTokens.userId, userId)).execute();
 }
 
-export async function setPassword(userId: number, passwordHash: string) {
-  await db.update(users).set({ passwordHash }).where(eq(users.id, userId)).execute();
+export async function setPassword(userId: number, passwordHash: string, tx: Executor = db) {
+  await tx.update(users).set({ passwordHash }).where(eq(users.id, userId)).execute();
 }
 
 export async function storeEmailToken(input: {
