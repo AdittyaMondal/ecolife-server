@@ -4,13 +4,13 @@
 > Run `pnpm gen:apidocs` after any contract change. `pnpm gen:apidocs -- --check`
 > fails CI when this file is stale.
 
-**Version** 0.1.0 · **Base path** `/api/v1` · **90 paths** · **112 operations** · **131 schemas**
+**Version** 0.1.0 · **Base path** `/api/v1` · **92 paths** · **115 operations** · **131 schemas**
 
 ---
 
 ## Before you read this
 
-**Every endpoint below is implemented.** All 112 operations run against the real
+**Every endpoint below is implemented.** All 115 operations run against the real
 database; none returns `GEN_501` any more. Point your client at the server, not
 at the mock — the mock serves the *examples* in this document, so it will happily
 return a plausible shape for a request the real server would reject.
@@ -66,6 +66,7 @@ an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` acce
 - [home](#home) — 1 operation
 - [track](#track) — 4 operations
 - [goals](#goals) — 5 operations
+- [garden](#garden) — 2 operations
 - [gamification](#gamification) — 3 operations
 - [leaderboard](#leaderboard) — 2 operations
 - [marketplace](#marketplace) — 14 operations
@@ -76,6 +77,7 @@ an httpOnly cookie, mobile in `expo-secure-store`, and `POST /auth/refresh` acce
 - [notifications](#notifications) — 6 operations
 - [reference](#reference) — 3 operations
 - [carbon](#carbon) — 1 operation
+- [ai](#ai) — 1 operation
 - [Schemas](#schemas)
 
 ---
@@ -753,6 +755,45 @@ Recomputes and re-freezes the target.
 | `200` | Progress | [`GoalProgress`](#goalprogress) |
 | `401` | Not authenticated | null |
 | `404` | Not found | null |
+
+---
+
+## garden
+
+| | Endpoint | Summary |
+|---|---|---|
+| `GET` | [`/api/v1/garden`](#get-api-v1-garden) 🔒 | Get user's saved garden arrangement and layout from DB |
+| `PUT` | [`/api/v1/garden`](#put-api-v1-garden) 🔒 | Save user's garden arrangement and layout to DB |
+
+### `GET` `/api/v1/garden`
+
+**Get user's saved garden arrangement and layout from DB**
+
+🔒 Requires a bearer token.
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | User garden state | object |
+
+### `PUT` `/api/v1/garden`
+
+**Save user's garden arrangement and layout to DB**
+
+🔒 Requires a bearer token.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `gardenState` | object | yes |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | Garden saved successfully | object |
 
 ---
 
@@ -2830,6 +2871,33 @@ Rendered at /methodology on web. No auth: it is the credibility surface.
 | Code | Meaning | `data` |
 |---|---|---|
 | `200` | Factor table | [`Methodology`](#methodology) |
+
+---
+
+## ai
+
+| | Endpoint | Summary |
+|---|---|---|
+| `POST` | [`/api/v1/ai/chat`](#post-api-v1-ai-chat)  | AI Advisor Chatbot powered by Google Gemini |
+
+### `POST` `/api/v1/ai/chat`
+
+**AI Advisor Chatbot powered by Google Gemini**
+
+🔓 No authentication.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `messages` | object[] | yes |  |
+| `context` | object | no |  |
+
+**Responses**
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `200` | AI response generated successfully | object |
 
 ---
 
